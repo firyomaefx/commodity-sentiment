@@ -337,8 +337,8 @@ def main():
 <div style="color:#8E8E93;font-size:14px;font-family:{APPLE_FONT};">{datetime.now(MYT).strftime("%I:%M %p")} MYT</div>
 <div style="color:#6E6E73;font-size:11px;font-family:{APPLE_FONT};margin-top:2px;">Auto-refresh {REFRESH_INTERVAL_SECONDS}s</div>
 </div>
-<a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#0A84FF;border:1px solid #0A84FF;border-radius:999px;padding:8px 18px;color:#FFFFFF;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:8px;"><span style="font-size:14px;">✈️</span> Subscribe</a>
-<a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#FFD60A;border:1px solid #FFD60A;border-radius:999px;padding:8px 18px;color:#1C1C1E;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;"><span style="font-size:14px;">☕</span> RM1.99</a>
+<a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#0A84FF;border:1px solid #0A84FF;border-radius:999px;padding:8px 18px;color:#FFFFFF;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:8px;"><span style="font-size:14px;">✈️</span> Get Via Telegram</a>
+<a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#FFD60A;border:1px solid #FFD60A;border-radius:999px;padding:8px 18px;color:#000000;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;"><span style="font-size:14px;">☕</span> Support Us</a>
 </div>
 </div>
 </div>''', unsafe_allow_html=True)

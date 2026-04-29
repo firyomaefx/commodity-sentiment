@@ -224,7 +224,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🥇 Gold Report", callback_data="report_gold"),
          InlineKeyboardButton("🛢️ WTI Report", callback_data="report_wti")],
         [InlineKeyboardButton("🌴 FCPO Report", callback_data="report_fcpo")],
-        [InlineKeyboardButton("☕ Support RM1.99", url=SENANGPAY_URL)],
+        [InlineKeyboardButton("☕ Support Us", url=SENANGPAY_URL)],
     ])
 
     await update.message.reply_text(

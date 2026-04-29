@@ -251,7 +251,7 @@ class SentimentAnalyzer:
                 supply_score -= 1
         return supply_score
 
-    def generate_final_bias(self, sentiment_score, dxy_bias, geo_intensity, macro_bias, contrarian_signal, supply_score=0):
+    def generate_final_bias(self, sentiment_score, dxy_bias, geo_intensity, macro_bias, contrarian_signal, supply_score=0, articles=None):
         score = 0
 
         if sentiment_score > 50:
@@ -353,7 +353,7 @@ class SentimentAnalyzer:
         dxy_bias = self.analyze_dxy(articles)
         supply_score = self._analyze_supply(articles)
         final_bias, justification = self.generate_final_bias(
-            sentiment_score, dxy_bias, geo_intensity, macro_bias, contrarian, supply_score
+            sentiment_score, dxy_bias, geo_intensity, macro_bias, contrarian, supply_score, articles
         )
 
         for a in articles:
