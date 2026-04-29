@@ -132,13 +132,13 @@ def generate_report(commodity="gold", groq_client=None):
     price_line = ""
     if price_data and price_data.get("price"):
         p = price_data["price"]
-        price_line = f"*{escape_md2(cfg['price_label'])} Spot\\:* {currency}{p:,.2f}"
+        price_line = f"*{escape_md2(cfg['price_label'])} Spot\\:* {currency}{escape_md2(f'{p:,.2f}')}"
         if price_data.get("change") is not None:
             chg = price_data["change"]
             pct = price_data["change_pct"]
             sign = "+" if chg >= 0 else ""
             arrow = "🟢" if chg >= 0 else "🔴"
-            price_line += f"  {arrow} {sign}{chg:.2f} \\({sign}{pct:.2f}%\\)"
+            price_line += f"  {arrow} {sign}{escape_md2(f'{chg:.2f}')} \\({sign}{escape_md2(f'{pct:.2f}')}%\\)"
 
     bias_emoji = {"Strong Buy": "🟢🟢", "Buy": "🟢", "Neutral": "🟡", "Sell": "🔴", "Strong Sell": "🔴🔴"}
     bias_key = f"final_{sk}_bias"
