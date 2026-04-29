@@ -371,38 +371,44 @@ async def main():
     health_thread.start()
     logger.info("Health server started on port 8502")
 
-    for attempt in range(3):
+    app = Application.builder().token(BOT_TOKEN).connect_timeout(60).read_timeout(60).write_timeout(60).build()
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("stop", stop_cmd))
+    app.add_handler(CommandHandler("report", report_cmd))
+    app.add_handler(CommandHandler("report_wti", report_wti_cmd))
+    app.add_handler(CommandHandler("report_fcpo", report_fcpo_cmd))
+    app.add_handler(CommandHandler("status", status_cmd))
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        lambda: app.create_task(daily_report_job(app)),
+        CronTrigger(hour=22, minute=1, timezone=timezone.utc),
+        id="daily_report",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("Scheduler started: daily report at 6:01 AM MYT (22:01 UTC)")
+
+    connected = False
+    for attempt in range(5):
         try:
-            app = Application.builder().token(BOT_TOKEN).connect_timeout(30).read_timeout(30).write_timeout(30).build()
-            app.add_handler(CommandHandler("start", start_cmd))
-            app.add_handler(CommandHandler("stop", stop_cmd))
-            app.add_handler(CommandHandler("report", report_cmd))
-            app.add_handler(CommandHandler("report_wti", report_wti_cmd))
-            app.add_handler(CommandHandler("report_fcpo", report_fcpo_cmd))
-            app.add_handler(CommandHandler("status", status_cmd))
-            app.add_handler(CallbackQueryHandler(button_handler))
-
-            scheduler = AsyncIOScheduler()
-            scheduler.add_job(
-                lambda: app.create_task(daily_report_job(app)),
-                CronTrigger(hour=22, minute=1, timezone=timezone.utc),
-                id="daily_report",
-                replace_existing=True,
-            )
-            scheduler.start()
-            logger.info("Scheduler started: daily report at 6:01 AM MYT (22:01 UTC)")
-
-            logger.info("Bot connecting to Telegram...")
+            logger.info(f"Bot connecting to Telegram (attempt {attempt+1}/5)...")
             await app.initialize()
             logger.info("Bot connected successfully")
+            connected = True
             break
         except Exception as e:
-            logger.error(f"Bot init attempt {attempt+1}/3 failed: {e}")
-            if attempt < 2:
-                await asyncio.sleep(10)
+            logger.error(f"Bot init attempt {attempt+1}/5 failed: {e}")
+            if attempt < 4:
+                delay = (attempt + 1) * 15
+                logger.info(f"Retrying in {delay}s...")
+                await asyncio.sleep(delay)
             else:
-                logger.error("Bot failed to start after 3 attempts — Telegram API may be unreachable")
-                return
+                logger.error("Bot failed to start after 5 attempts — Telegram API unreachable from this network")
+
+    if not connected:
+        return
 
     await app.start()
     await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)

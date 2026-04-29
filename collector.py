@@ -46,7 +46,34 @@ class DataCollector:
                     return {"price": round(price, 2), "change": round(change, 2), "change_pct": round(change_pct, 2), "source": "yahoo", "currency": currency}
         except Exception:
             pass
+
+        if self.commodity == "fcpo":
+            return self._fetch_fcpo_price()
         return None
+
+    def _fetch_fcpo_price(self):
+        try:
+            resp = self.session.get("https://www.investing.com/commodities/palm-oil", timeout=15)
+            if resp.status_code != 200:
+                return None
+            soup = BeautifulSoup(resp.text, "html.parser")
+            price_el = soup.select_one('[data-test="instrument-price-last"]')
+            if not price_el:
+                return None
+            price_text = price_el.text.strip().replace(",", "")
+            price = float(price_text)
+            prev_el = soup.select_one('[data-test="instrument-price-prev-close"]')
+            prev = price
+            if prev_el:
+                try:
+                    prev = float(prev_el.text.strip().replace(",", ""))
+                except ValueError:
+                    pass
+            change = price - prev
+            change_pct = (change / prev) * 100 if prev else 0
+            return {"price": round(price, 2), "change": round(change, 2), "change_pct": round(change_pct, 2), "source": "investing.com", "currency": "RM"}
+        except Exception:
+            return None
 
     def fetch_rss(self, feed_urls=None):
         if feed_urls is None:
