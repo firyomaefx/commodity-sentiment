@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from collector import DataCollector
 from analyzer import SentimentAnalyzer
 from config import COMMODITY_CONFIGS, REFRESH_INTERVAL_SECONDS
+from groq_client import GroqAnalyzer
 
 st.set_page_config(
     page_title="Commodity Sentiment Dashboard",
@@ -42,14 +43,16 @@ if os.path.exists(ENV_FILE):
                 key, _, val = line.partition("=")
                 os.environ.setdefault(key.strip(), val.strip())
 
+groq_client = GroqAnalyzer()
+
 
 @st.cache_data(ttl=REFRESH_INTERVAL_SECONDS, show_spinner=False)
 def fetch_and_analyze(commodity="gold"):
     cfg = COMMODITY_CONFIGS.get(commodity, COMMODITY_CONFIGS["gold"])
     collector = DataCollector(commodity=commodity)
-    analyzer = SentimentAnalyzer(commodity=commodity)
+    analyzer = SentimentAnalyzer(commodity=commodity, groq_client=groq_client)
     price_data = collector.fetch_price()
-    data = collector.collect_all()
+    data = collector.collect_all(groq_client=groq_client)
     result = analyzer.run_full_analysis(data["articles"])
     result["collection_meta"] = {
         "total_articles": data["total_articles"],
@@ -199,16 +202,23 @@ def main():
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+        [data-testid="stAppViewContainer"] {{
+            background: #0A0A0A;
+        }}
         .stApp {{
-            background: #000000;
+            background: #0A0A0A;
             color: #F5F5F7;
             font-family: {APPLE_FONT};
         }}
-
+        [data-testid="stHeader"] {{
+            background: #0A0A0A;
+        }}
         .stSidebar {{
-            background: rgba(28,28,30,0.9) !important;
-            backdrop-filter: blur(40px);
-            -webkit-backdrop-filter: blur(40px);
+            background: #111111 !important;
+            border-right: 1px solid #1C1C1E !important;
+        }}
+        section[data-testid="stSidebar"] {{
+            background: #111111 !important;
         }}
 
         h1, h2, h3, h4, h5, h6 {{
@@ -217,22 +227,14 @@ def main():
             font-weight: 600 !important;
             letter-spacing: -0.02em !important;
         }}
-
-        .stMarkdown, .stText {{
-            color: #86868B !important;
+        .stMarkdown, .stText, p {{
+            color: #8E8E93 !important;
             font-family: {APPLE_FONT} !important;
         }}
-
-        p {{
-            color: #86868B !important;
-            font-family: {APPLE_FONT} !important;
-        }}
-
         .stCaption {{
-            color: #636366 !important;
+            color: #6E6E73 !important;
             font-family: {APPLE_FONT} !important;
         }}
-
         .stDivider {{
             border-top-color: rgba(255,255,255,0.06) !important;
         }}
@@ -240,25 +242,27 @@ def main():
         .stButton > button {{
             background: rgba(255,255,255,0.08) !important;
             color: #F5F5F7 !important;
-            border: 1px solid rgba(255,255,255,0.1) !important;
-            border-radius: 980px !important;
+            border: 1px solid rgba(255,255,255,0.12) !important;
+            border-radius: 999px !important;
             padding: 10px 28px !important;
             font-weight: 600 !important;
             font-family: {APPLE_FONT} !important;
             font-size: 14px !important;
-            transition: all 0.2s ease !important;
+            transition: all 0.15s ease !important;
+            min-height: 44px !important;
         }}
         .stButton > button:hover {{
             background: rgba(255,255,255,0.14) !important;
-            border-color: rgba(255,255,255,0.18) !important;
+            border-color: rgba(255,255,255,0.22) !important;
+        }}
+        .stButton > button:active {{
+            background: rgba(255,255,255,0.2) !important;
         }}
 
         .stExpander {{
             border: 1px solid rgba(255,255,255,0.06) !important;
-            border-radius: 16px !important;
-            background: rgba(28,28,30,0.5) !important;
-            backdrop-filter: blur(20px) !important;
-            -webkit-backdrop-filter: blur(20px) !important;
+            border-radius: 14px !important;
+            background: rgba(30,30,32,0.6) !important;
             margin-bottom: 6px !important;
         }}
         .stExpander:hover {{
@@ -271,25 +275,6 @@ def main():
             font-weight: 500 !important;
             padding: 12px 16px !important;
         }}
-        .stExpander div[data-testid="stExpanderDetails"] {{
-            border-top: 1px solid rgba(255,255,255,0.04) !important;
-            padding: 12px 16px !important;
-        }}
-
-        .stInfo {{
-            background: rgba(0,122,255,0.08) !important;
-            border: 1px solid rgba(0,122,255,0.15) !important;
-            border-radius: 14px !important;
-            color: #F5F5F7 !important;
-            font-family: {APPLE_FONT} !important;
-        }}
-        .stWarning {{
-            background: rgba(255,159,10,0.08) !important;
-            border: 1px solid rgba(255,159,10,0.15) !important;
-            border-radius: 14px !important;
-            color: #F5F5F7 !important;
-            font-family: {APPLE_FONT} !important;
-        }}
 
         a {{
             color: #0A84FF !important;
@@ -298,7 +283,6 @@ def main():
         a:hover {{
             text-decoration: underline !important;
         }}
-
         code {{
             font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace !important;
             background: rgba(255,255,255,0.06) !important;
@@ -307,19 +291,31 @@ def main():
             color: #FFD60A !important;
         }}
 
-        section[data-testid="stSidebar"] {{
-            background: rgba(28,28,30,0.9) !important;
+        [data-testid="stMetricValue"] {{
+            font-family: {APPLE_FONT} !important;
+            font-size: 32px !important;
+            font-weight: 700 !important;
+        }}
+        [data-testid="stMetricLabel"] {{
+            font-family: {APPLE_FONT} !important;
         }}
 
         .element-container {{
             margin-bottom: 4px !important;
         }}
+
+        @media (max-width: 768px) {{
+            .stButton > button {{
+                font-size: 13px !important;
+                padding: 10px 18px !important;
+            }}
+        }}
     </style>
     """, unsafe_allow_html=True)
 
     with st.sidebar:
-        st.markdown(f"<div style='color:#86868B;font-size:13px;font-weight:600;letter-spacing:0.1em;margin-bottom:8px;font-family:{APPLE_FONT};'>ABOUT</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Real-time sentiment intelligence for Gold & WTI Crude Oil.<br><br>VADER NLP + Rule-Based engine scanning RSS feeds and news articles.<br><br>Daily Telegram report at <b>6:01 AM MYT</b>.<br><br><a href='https://t.me/PedotTTRG' style='color:#0A84FF;'>Prepared by @PedotTTRG</a></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:#8E8E93;font-size:13px;font-weight:600;letter-spacing:0.1em;margin-bottom:8px;font-family:{APPLE_FONT};'>ABOUT</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:#8E8E93;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Real-time sentiment for Gold, WTI Crude Oil & FCPO Palm Oil.<br><br>Groq AI + VADER NLP engine scanning RSS feeds and news articles.<br><br>Daily Telegram report at <b>6:01 AM MYT</b>.<br><br><a href='https://t.me/PedotTTRG' style='color:#0A84FF;'>Prepared by @PedotTTRG</a></div>", unsafe_allow_html=True)
 
     if "commodity" not in st.session_state:
         st.session_state["commodity"] = "gold"
@@ -327,9 +323,27 @@ def main():
     commodity = st.session_state["commodity"]
     cfg = COMMODITY_CONFIGS.get(commodity, COMMODITY_CONFIGS["gold"])
 
-    st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><div><div style="color:#86868B;font-size:14px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;font-family:{APPLE_FONT};">Commodity Sentiment Intelligence</div><div style="color:#F5F5F7;font-size:46px;font-weight:700;letter-spacing:-0.03em;line-height:1.1;margin-top:4px;font-family:{APPLE_FONT};">{cfg["display_name"]}</div></div><div style="color:#636366;font-size:14px;font-family:{APPLE_FONT};text-align:right;">{datetime.now(MYT).strftime("%I:%M %p")} MYT<br>Auto-refresh {REFRESH_INTERVAL_SECONDS}s</div></div>', unsafe_allow_html=True)
+    TELEGRAM_BOT = os.environ.get("TELEGRAM_BOT_USERNAME", "SentimentIntelligence26Bot")
+    SENANGPAY_URL = os.environ.get("SENANGPAY_URL", "https://app.senangpay.my/payment/177739832230")
 
-    col_gold, col_wti = st.columns([1, 1])
+    st.markdown(f'''<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:12px;">
+<div style="flex:1;min-width:200px;">
+<div style="color:#8E8E93;font-size:13px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};">Commodity Sentiment Intelligence</div>
+<div style="color:#F5F5F7;font-size:44px;font-weight:700;letter-spacing:-0.03em;line-height:1.1;margin-top:2px;font-family:{APPLE_FONT};">{cfg["display_name"]}</div>
+</div>
+<div style="text-align:right;">
+<div style="display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+<div>
+<div style="color:#8E8E93;font-size:14px;font-family:{APPLE_FONT};">{datetime.now(MYT).strftime("%I:%M %p")} MYT</div>
+<div style="color:#6E6E73;font-size:11px;font-family:{APPLE_FONT};margin-top:2px;">Auto-refresh {REFRESH_INTERVAL_SECONDS}s</div>
+</div>
+<a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#0A84FF;border:1px solid #0A84FF;border-radius:999px;padding:8px 18px;color:#FFFFFF;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:8px;"><span style="font-size:14px;">✈️</span> Subscribe</a>
+<a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#FFD60A;border:1px solid #FFD60A;border-radius:999px;padding:8px 18px;color:#1C1C1E;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;"><span style="font-size:14px;">☕</span> RM1.99</a>
+</div>
+</div>
+</div>''', unsafe_allow_html=True)
+
+    col_gold, col_wti, col_fcpo = st.columns([1, 1, 1])
     with col_gold:
         if st.button("🥇 GOLD", key="btn_gold", use_container_width=True):
             st.session_state["commodity"] = "gold"
@@ -338,14 +352,14 @@ def main():
         if st.button("🛢️ WTI CRUDE OIL", key="btn_wti", use_container_width=True):
             st.session_state["commodity"] = "wti"
             st.rerun()
+    with col_fcpo:
+        if st.button("🌴 FCPO PALM OIL", key="btn_fcpo", use_container_width=True):
+            st.session_state["commodity"] = "fcpo"
+            st.rerun()
 
     if st.button("Refresh Analysis", use_container_width=False):
         st.cache_data.clear()
         st.rerun()
-
-    TELEGRAM_BOT = os.environ.get("TELEGRAM_BOT_USERNAME", "SentimentIntelligence26Bot")
-    SENANGPAY_URL = os.environ.get("SENANGPAY_URL", "https://app.senangpay.my/payment/177739832230")
-    st.markdown(f'<div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;"><a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,122,255,0.15);border:1px solid rgba(0,122,255,0.3);border-radius:980px;padding:10px 22px;color:#0A84FF;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;"><span style="font-size:16px;">✈️</span> Subscribe on Telegram</a><a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,159,10,0.15);border:1px solid rgba(255,159,10,0.3);border-radius:980px;padding:10px 22px;color:#FF9F0A;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;"><span style="font-size:16px;">☕</span> Support for RM1.99</a></div>', unsafe_allow_html=True)
 
     result, data, price_data = fetch_and_analyze(commodity)
 
@@ -362,10 +376,11 @@ def main():
 
     bias_color = BIAS_COLORS.get(fs[bias_key], "#FFD60A")
 
+    currency = cfg.get("currency", "$")
     price_str = ""
     if price_data and price_data.get("price"):
         price_val = price_data["price"]
-        price_str = f'<span style="color:#FFD60A;font-size:2.4em;font-weight:700;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;font-family:{APPLE_FONT};">${price_val:,.2f}</span>'
+        price_str = f'<span style="color:#FFD60A;font-size:2.4em;font-weight:700;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;font-family:{APPLE_FONT};">{currency}{price_val:,.2f}</span>'
         if price_data.get("change") is not None:
             chg = price_data["change"]
             pct = price_data["change_pct"]
@@ -380,7 +395,20 @@ def main():
     except Exception:
         pull_time_str = "—"
 
-    st.markdown(f'<div style="background:linear-gradient(135deg,rgba(28,28,30,0.8),rgba(0,0,0,0.6));border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:40px 48px;margin-bottom:24px;box-shadow:0 8px 32px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:space-between;"><div><div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:8px;">Signal</div><div style="color:{bias_color};font-size:3em;font-weight:700;letter-spacing:-0.03em;line-height:1;font-family:{APPLE_FONT};">{fs[bias_key]}</div><div style="color:#86868B;font-size:15px;margin-top:12px;max-width:600px;line-height:1.5;font-family:{APPLE_FONT};">{fs["justification"]}</div></div><div style="text-align:right;padding-left:48px;min-width:220px;"><div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:8px;">{cfg["price_label"]}</div>{price_str}<div style="color:#636366;font-size:12px;margin-top:10px;font-family:{APPLE_FONT};">Data as of {pull_time_str} MYT</div></div></div>', unsafe_allow_html=True)
+    ai_badge = groq_client.get_badge_html() if groq_client and groq_client.available else ""
+
+    st.markdown(f'''<div style="background:#1C1C1E;border:1px solid #2C2C2E;border-radius:20px;padding:32px 40px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:24px;">
+<div style="flex:1;min-width:280px;">
+<div style="color:#8E8E93;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:6px;">Signal{ai_badge}</div>
+<div style="color:{bias_color};font-size:2.6em;font-weight:700;letter-spacing:-0.03em;line-height:1;font-family:{APPLE_FONT};">{fs[bias_key]}</div>
+<div style="color:#8E8E93;font-size:14px;margin-top:10px;max-width:560px;line-height:1.5;font-family:{APPLE_FONT};">{fs["justification"]}</div>
+</div>
+<div style="text-align:right;flex-shrink:0;min-width:200px;">
+<div style="color:#8E8E93;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:6px;">{cfg["price_label"]}</div>
+{price_str}
+<div style="color:#6E6E73;font-size:11px;margin-top:8px;font-family:{APPLE_FONT};">Data as of {pull_time_str} MYT</div>
+</div>
+</div>''', unsafe_allow_html=True)
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -392,7 +420,7 @@ def main():
         dxy_dc = "#FF453A" if a3["dxy_directional_bias"] == "Bullish" else "#30D158" if a3["dxy_directional_bias"] == "Bearish" else "#86868B"
         st.markdown(metric_card("DXY Bias", a3["dxy_directional_bias"], dxy_delta, dxy_dc), unsafe_allow_html=True)
     with col4:
-        if commodity == "wti":
+        if commodity in ("wti", "fcpo"):
             supply_score = meta.get("supply_score", 0)
             supply_label = "Tight" if supply_score > 0.15 else "Oversupply" if supply_score < -0.15 else "Balanced"
             supply_dc = "#30D158" if supply_score > 0.15 else "#FF453A" if supply_score < -0.15 else "#FFD60A"
@@ -468,9 +496,7 @@ def main():
 
     st.markdown("<div style='border-top: 1px solid rgba(255,255,255,0.06); margin: 28px 0;'></div>", unsafe_allow_html=True)
 
-    st.markdown(f'<div style="display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:16px;"><a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:rgba(0,122,255,0.12);border:1px solid rgba(0,122,255,0.25);border-radius:980px;padding:12px 28px;color:#0A84FF;font-family:{APPLE_FONT};font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s ease;"><span style="font-size:18px;">✈️</span> Subscribe on Telegram</a><a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,159,10,0.12);border:1px solid rgba(255,159,10,0.25);border-radius:980px;padding:12px 28px;color:#FF9F0A;font-family:{APPLE_FONT};font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s ease;"><span style="font-size:18px;">☕</span> Support for RM1.99</a></div>', unsafe_allow_html=True)
-
-    st.markdown(f'<div style="text-align:center;color:#636366;font-size:11px;font-family:{APPLE_FONT};margin-bottom:20px;">Daily reports at 6:01 AM MYT &middot; /report /report\\_wti for on-demand &middot; VADER + Rule-Based Engine<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align:center;color:#636366;font-size:11px;font-family:{APPLE_FONT};margin-bottom:20px;">Daily reports at 6:01 AM MYT &middot; /report /report\\_wti /report\\_fcpo on-demand &middot; VADER + Groq AI Engine<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True)
 
     try:
         from streamlit_autorefresh import st_autorefresh

@@ -19,6 +19,7 @@ from apscheduler.triggers.cron import CronTrigger
 from collector import DataCollector
 from analyzer import SentimentAnalyzer
 from config import COMMODITY_CONFIGS
+from groq_client import GroqAnalyzer
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -109,15 +110,17 @@ class SubscriberStore:
 
 
 store = SubscriberStore()
+groq_client = GroqAnalyzer()
 
 
-def generate_report(commodity="gold"):
+def generate_report(commodity="gold", groq_client=None):
     cfg = COMMODITY_CONFIGS.get(commodity, COMMODITY_CONFIGS["gold"])
     sk = cfg.get("score_key", commodity)
+    currency = cfg.get("currency", "$")
     collector = DataCollector(commodity=commodity)
-    analyzer = SentimentAnalyzer(commodity=commodity)
+    analyzer = SentimentAnalyzer(commodity=commodity, groq_client=groq_client)
     price_data = collector.fetch_price()
-    data = collector.collect_all()
+    data = collector.collect_all(groq_client=groq_client)
     result = analyzer.run_full_analysis(data["articles"])
 
     a1 = result["analysis_1_macro"]
@@ -129,7 +132,7 @@ def generate_report(commodity="gold"):
     price_line = ""
     if price_data and price_data.get("price"):
         p = price_data["price"]
-        price_line = f"*{escape_md2(cfg['price_label'])} Spot\\:* ${p:,.2f}"
+        price_line = f"*{escape_md2(cfg['price_label'])} Spot\\:* {currency}{p:,.2f}"
         if price_data.get("change") is not None:
             chg = price_data["change"]
             pct = price_data["change_pct"]
@@ -156,10 +159,11 @@ def generate_report(commodity="gold"):
         articles_text += f"\n{i}\\. {indicator} _{title}_"
 
     supply_line = ""
-    if commodity == "wti":
+    if commodity in ("wti", "fcpo"):
         supply_score = meta.get("supply_score", 0)
         supply_label = "Tight" if supply_score > 0 else "Oversupply" if supply_score < 0 else "Balanced"
-        supply_line = f"\n🛢️ *Supply\\:* {escape_md2(supply_label)} \\({supply_score}\\)"
+        icon = "🛢️" if commodity == "wti" else "🌴"
+        supply_line = f"\n{icon} *Supply\\:* {escape_md2(supply_label)} \\({supply_score}\\)"
 
     report = f"""*{escape_md2(cfg['display_name'])} Sentiment Report*
 📅 {escape_md2(datetime.now(MYT).strftime('%d %b %Y, %H:%M'))} MYT
@@ -206,6 +210,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Commands:\n"
             "/report — Gold report now\n"
             "/report\\_wti — WTI report now\n"
+            "/report\\_fcpo — FCPO report now\n"
             "/stop — Unsubscribe\n"
             "/status — Check status",
             parse_mode="MarkdownV2",
@@ -218,6 +223,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🥇 Gold Report", callback_data="report_gold"),
          InlineKeyboardButton("🛢️ WTI Report", callback_data="report_wti")],
+        [InlineKeyboardButton("🌴 FCPO Report", callback_data="report_fcpo")],
         [InlineKeyboardButton("☕ Support RM1.99", url=SENANGPAY_URL)],
     ])
 
@@ -225,12 +231,13 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Welcome, *{username}*\\! 🎉\n\n"
         "You're now subscribed to *Commodity Sentiment Reports*\\.\n\n"
         "🌟 *Your Perks:*\n"
-        "🕕 Daily Gold \\+ WTI reports at *6:01 AM MYT*\n"
-        "📊 On-demand /report \\| /report\\_wti anytime\n"
+        "🕕 Daily Gold \\+ WTI \\+ FCPO at *6:01 AM MYT*\n"
+        "📊 On-demand /report \\| /report\\_wti \\| /report\\_fcpo anytime\n"
         "📱 Instant delivery to your phone\n\n"
         "Commands:\n"
         "🥇 /report — Gold report now\n"
         "🛢️ /report\\_wti — WTI report now\n"
+        "🌴 /report\\_fcpo — FCPO report now\n"
         "🚫 /stop — Unsubscribe\n\n"
         "☕ Support us: *RM1\\.99* via SenangPay\n\n"
         "Tap the buttons below\\!",
@@ -263,7 +270,7 @@ async def stop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _send_report(chat_or_query, commodity):
     try:
-        report = await asyncio.to_thread(generate_report, commodity)
+        report = await asyncio.to_thread(generate_report, commodity, groq_client)
         await chat_or_query.reply_text(report, parse_mode="MarkdownV2")
     except Exception as e:
         logger.error(f"{commodity} report generation failed: {e}", exc_info=True)
@@ -280,6 +287,11 @@ async def report_wti_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _send_report(update.message, "wti")
 
 
+async def report_fcpo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⏳ Generating FCPO report\\.\\.\\.", parse_mode="MarkdownV2")
+    await _send_report(update.message, "fcpo")
+
+
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     subs = store.load()
@@ -288,7 +300,7 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     status = "✅ Subscribed" if is_sub else "❌ Not subscribed"
     await update.message.reply_text(
-        f"*Your Status:* {status}\n*Total Subscribers:* {total_subs}\n*Daily Reports:* Gold \\+ WTI at 6:01 AM MYT",
+        f"*Your Status:* {status}\n*Total Subscribers:* {total_subs}\n*Daily Reports:* Gold \\+ WTI \\+ FCPO at 6:01 AM MYT",
         parse_mode="MarkdownV2",
     )
 
@@ -296,9 +308,9 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    commodity = "gold" if query.data == "report_gold" else "wti" if query.data == "report_wti" else None
+    commodity = "gold" if query.data == "report_gold" else "wti" if query.data == "report_wti" else "fcpo" if query.data == "report_fcpo" else None
     if commodity:
-        label = "Gold" if commodity == "gold" else "WTI"
+        label = {"gold": "Gold", "wti": "WTI", "fcpo": "FCPO"}.get(commodity, commodity)
         await query.message.reply_text(f"⏳ Generating {label} report\\.\\.\\.", parse_mode="MarkdownV2")
         await _send_report(query.message, commodity)
 
@@ -310,9 +322,9 @@ async def daily_report_job(context: ContextTypes.DEFAULT_TYPE):
         return
 
     logger.info(f"Sending daily reports to {len(subs)} subscribers")
-    for commodity in ["gold", "wti"]:
+    for commodity in ["gold", "wti", "fcpo"]:
         try:
-            report = await asyncio.to_thread(generate_report, commodity)
+            report = await asyncio.to_thread(generate_report, commodity, groq_client)
         except Exception as e:
             logger.error(f"Daily {commodity} report generation failed: {e}", exc_info=True)
             continue
@@ -365,6 +377,7 @@ async def main():
     app.add_handler(CommandHandler("stop", stop_cmd))
     app.add_handler(CommandHandler("report", report_cmd))
     app.add_handler(CommandHandler("report_wti", report_wti_cmd))
+    app.add_handler(CommandHandler("report_fcpo", report_fcpo_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CallbackQueryHandler(button_handler))
 

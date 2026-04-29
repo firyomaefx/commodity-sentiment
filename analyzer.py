@@ -6,9 +6,10 @@ _TOKEN_RE = re.compile(r"\b[%\w]+\b", re.UNICODE)
 
 
 class SentimentAnalyzer:
-    def __init__(self, commodity="gold"):
+    def __init__(self, commodity="gold", groq_client=None):
         self.commodity = commodity
         self.config = COMMODITY_CONFIGS.get(commodity, COMMODITY_CONFIGS["gold"])
+        self.groq = groq_client
         self.vader = SentimentIntensityAnalyzer()
         self.keywords = self.config["keywords"]
         self.bullish_phrases = self.config["bullish_phrases"]
@@ -124,12 +125,16 @@ class SentimentAnalyzer:
             bias = "Dovish"
             if self.commodity == "wti":
                 summary = f"Fed sentiment leans dovish ({dovish_count} dovish vs {hawkish_count} hawkish signals). Lower rates weaken USD, supporting oil prices via stronger demand outlook."
+            elif self.commodity == "fcpo":
+                summary = f"Fed sentiment leans dovish ({dovish_count} dovish vs {hawkish_count} hawkish signals). Weaker USD supports palm oil prices and emerging market demand."
             else:
                 summary = f"Fed sentiment leans dovish ({dovish_count} dovish vs {hawkish_count} hawkish signals). Rate cut expectations supporting gold as real yields face downward pressure."
         elif hawkish_count > dovish_count:
             bias = "Hawkish"
             if self.commodity == "wti":
                 summary = f"Fed sentiment leans hawkish ({hawkish_count} hawkish vs {dovish_count} dovish signals). Higher rates strengthen USD and weigh on oil demand outlook."
+            elif self.commodity == "fcpo":
+                summary = f"Fed sentiment leans hawkish ({hawkish_count} hawkish vs {dovish_count} dovish signals). Stronger USD pressures palm oil prices and emerging market demand."
             else:
                 summary = f"Fed sentiment leans hawkish ({hawkish_count} hawkish vs {dovish_count} dovish signals). Rate hold/hike expectations pressuring gold via stronger dollar and higher yield outlook."
         else:
@@ -146,13 +151,18 @@ class SentimentAnalyzer:
         total_weight = 0
 
         for a in articles:
-            vader_s = self._vader_sentiment(a["text"])
-            phrase_s = self._phrase_sentiment(a["text"])
-            keyword_weight = a.get("keyword_score", 1)
+            if a.get("groq_enhanced"):
+                gs = a.get("groq_sentiment_score", 0)
+                combined = gs * 1.5
+                weight = a.get("keyword_score", 1) * 1.5
+            else:
+                vader_s = self._vader_sentiment(a["text"])
+                phrase_s = self._phrase_sentiment(a["text"])
+                combined = vader_s * 40 + phrase_s * 15
+                weight = a.get("keyword_score", 1)
 
-            combined = vader_s * 40 + phrase_s * 15
-            total_score += combined * keyword_weight
-            total_weight += keyword_weight
+            total_score += combined * weight
+            total_weight += weight
 
         if total_weight == 0:
             return 0, "Neutral"
@@ -224,11 +234,15 @@ class SentimentAnalyzer:
         return "Neutral"
 
     def _analyze_supply(self, articles):
-        if self.commodity != "wti":
+        if self.commodity not in ("wti", "fcpo"):
             return 0
         supply_score = 0
-        supply_bullish = ["opec cut", "production cut", "output cut", "inventory draw", "supply disruption", "strategic reserves", "pipeline attack"]
-        supply_bearish = ["opec increase", "production increase", "output hike", "inventory build", "demand destruction", "shale boom", "oversupply"]
+        if self.commodity == "wti":
+            supply_bullish = ["opec cut", "production cut", "output cut", "inventory draw", "supply disruption", "strategic reserves", "pipeline attack"]
+            supply_bearish = ["opec increase", "production increase", "output hike", "inventory build", "demand destruction", "shale boom", "oversupply"]
+        else:
+            supply_bullish = ["stocks decline", "lower stockpiles", "production drop", "lower output", "DMO tightening", "export quota reduced", "biodiesel mandate", "El Niño"]
+            supply_bearish = ["stockpiles surge", "inventory build", "higher stockpiles", "production surge", "bumper crop", "DMO relaxed", "favorable weather", "oversupply"]
         for a in articles:
             text_lower = a["text"].lower()
             if any(p in text_lower for p in supply_bullish):
@@ -264,7 +278,7 @@ class SentimentAnalyzer:
         elif macro_bias == "Hawkish":
             score -= 2
 
-        if self.commodity == "wti":
+        if self.commodity in ("wti", "fcpo"):
             score += supply_score
 
         if contrarian_signal == "YES":
@@ -288,6 +302,8 @@ class SentimentAnalyzer:
         if geo_intensity in ["High", "Moderate"]:
             if self.commodity == "wti":
                 drivers.append("geopolitical supply risk")
+            elif self.commodity == "fcpo":
+                drivers.append("supply chain disruption")
             else:
                 drivers.append("geopolitical fear premium")
         if macro_bias == "Dovish":
@@ -295,6 +311,8 @@ class SentimentAnalyzer:
         elif macro_bias == "Hawkish":
             if self.commodity == "wti":
                 drivers.append("hawkish Fed demand pressure")
+            elif self.commodity == "fcpo":
+                drivers.append("hawkish Fed pressure on EM demand")
             else:
                 drivers.append("hawkish Fed pressure")
         if dxy_bias == "Bearish":
@@ -305,10 +323,25 @@ class SentimentAnalyzer:
             drivers.append("supply tightness")
         elif self.commodity == "wti" and supply_score < 0:
             drivers.append("supply excess")
+        if self.commodity == "fcpo" and supply_score > 0:
+            drivers.append("palm oil supply tightness")
+        elif self.commodity == "fcpo" and supply_score < 0:
+            drivers.append("palm oil oversupply")
         if contrarian_signal == "YES":
             drivers.append("contrarian reversal risk")
 
-        justification = f"Primary drivers: {'; '.join(drivers[:3])}. Sentiment score {sentiment_score} with contrarian signal={contrarian_signal}."
+        if self.groq and self.groq.available:
+            top_headlines = ", ".join(a["title"][:60] for a in articles[:5]) if articles else ""
+            groq_just = self.groq.generate_justification(
+                bias, sentiment_score, dxy_bias, geo_intensity, macro_bias,
+                contrarian_signal, supply_score, self.commodity, top_headlines
+            )
+            if groq_just:
+                justification = groq_just
+            else:
+                justification = f"{', '.join(drivers[:3])}. Sentiment {sentiment_score}, contrarian={contrarian_signal}."
+        else:
+            justification = f"{', '.join(drivers[:3])}. Sentiment {sentiment_score}, contrarian={contrarian_signal}."
         return bias, justification
 
     def run_full_analysis(self, articles):
@@ -360,7 +393,7 @@ class SentimentAnalyzer:
 if __name__ == "__main__":
     import json
     from collector import DataCollector
-    for comm in ["gold", "wti"]:
+    for comm in ["gold", "wti", "fcpo"]:
         c = DataCollector(commodity=comm)
         data = c.collect_all()
         a = SentimentAnalyzer(commodity=comm)

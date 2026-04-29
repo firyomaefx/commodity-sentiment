@@ -29,6 +29,7 @@ class DataCollector:
 
     def fetch_price(self):
         ticker = self.config["ticker"]
+        currency = self.config.get("currency", "$")
         try:
             resp = self.session.get(
                 f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1m",
@@ -42,7 +43,7 @@ class DataCollector:
                 if price and prev:
                     change = price - prev
                     change_pct = (change / prev) * 100
-                    return {"price": round(price, 2), "change": round(change, 2), "change_pct": round(change_pct, 2), "source": "yahoo"}
+                    return {"price": round(price, 2), "change": round(change, 2), "change_pct": round(change_pct, 2), "source": "yahoo", "currency": currency}
         except Exception:
             pass
         return None
@@ -117,7 +118,7 @@ class DataCollector:
 
         return all_entries
 
-    def collect_all(self):
+    def collect_all(self, groq_client=None):
         self.articles = []
         rss_results = self.fetch_rss()
         web_results = self.fetch_web_search()
@@ -130,6 +131,8 @@ class DataCollector:
                 seen_titles.add(key)
                 unique.append(a)
         self.articles = sorted(unique, key=lambda x: x["keyword_score"], reverse=True)[:150]
+        if groq_client and groq_client.available:
+            self.articles = groq_client.batch_classify_articles(self.articles, self.commodity)
         return {
             "total_articles": len(self.articles),
             "rss_count": len(rss_results),
@@ -141,7 +144,7 @@ class DataCollector:
 
 
 if __name__ == "__main__":
-    for comm in ["gold", "wti"]:
+    for comm in ["gold", "wti", "fcpo"]:
         c = DataCollector(commodity=comm)
         data = c.collect_all()
         print(f"\n=== {comm.upper()} ===")
