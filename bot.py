@@ -363,7 +363,7 @@ def run_health_server(port=8502):
 async def main():
     if not BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN not set! Set it in .env or as environment variable.")
-        sys.exit(1)
+        return
 
     store.load()
 
@@ -371,30 +371,42 @@ async def main():
     health_thread.start()
     logger.info("Health server started on port 8502")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    for attempt in range(3):
+        try:
+            app = Application.builder().token(BOT_TOKEN).connect_timeout(30).read_timeout(30).write_timeout(30).build()
+            app.add_handler(CommandHandler("start", start_cmd))
+            app.add_handler(CommandHandler("stop", stop_cmd))
+            app.add_handler(CommandHandler("report", report_cmd))
+            app.add_handler(CommandHandler("report_wti", report_wti_cmd))
+            app.add_handler(CommandHandler("report_fcpo", report_fcpo_cmd))
+            app.add_handler(CommandHandler("status", status_cmd))
+            app.add_handler(CallbackQueryHandler(button_handler))
 
-    app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("stop", stop_cmd))
-    app.add_handler(CommandHandler("report", report_cmd))
-    app.add_handler(CommandHandler("report_wti", report_wti_cmd))
-    app.add_handler(CommandHandler("report_fcpo", report_fcpo_cmd))
-    app.add_handler(CommandHandler("status", status_cmd))
-    app.add_handler(CallbackQueryHandler(button_handler))
+            scheduler = AsyncIOScheduler()
+            scheduler.add_job(
+                lambda: app.create_task(daily_report_job(app)),
+                CronTrigger(hour=22, minute=1, timezone=timezone.utc),
+                id="daily_report",
+                replace_existing=True,
+            )
+            scheduler.start()
+            logger.info("Scheduler started: daily report at 6:01 AM MYT (22:01 UTC)")
 
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        lambda: app.create_task(daily_report_job(app)),
-        CronTrigger(hour=22, minute=1, timezone=timezone.utc),
-        id="daily_report",
-        replace_existing=True,
-    )
-    scheduler.start()
-    logger.info("Scheduler started: daily report at 6:01 AM MYT (22:01 UTC)")
+            logger.info("Bot connecting to Telegram...")
+            await app.initialize()
+            logger.info("Bot connected successfully")
+            break
+        except Exception as e:
+            logger.error(f"Bot init attempt {attempt+1}/3 failed: {e}")
+            if attempt < 2:
+                await asyncio.sleep(10)
+            else:
+                logger.error("Bot failed to start after 3 attempts — Telegram API may be unreachable")
+                return
 
-    logger.info("Bot starting...")
-    await app.initialize()
     await app.start()
     await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    logger.info("Bot polling started")
 
     try:
         while True:
