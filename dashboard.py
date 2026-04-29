@@ -317,6 +317,21 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
+    with st.sidebar:
+        st.markdown(f"<div style='color:#86868B;font-size:13px;font-weight:600;letter-spacing:0.1em;margin-bottom:8px;font-family:{APPLE_FONT};'>METRICS GUIDE</div>", unsafe_allow_html=True)
+        with st.expander("Sentiment Score", expanded=False):
+            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Range <b>&minus;100</b> to <b>+100</b>.<br><br><span style='color:#30D158;'>+50 to +100</span>: Extremely Bullish<br><span style='color:#34C759;'>+20 to +50</span>: Bullish<br><span style='color:#FFD60A;'>-20 to +20</span>: Neutral<br><span style='color:#FF453A;'>-50 to -20</span>: Bearish<br><span style='color:#FF3B30;'>-100 to -50</span>: Extremely Bearish<br><br><i>VADER emotional tone x keyword relevance. Articles with stronger keyword matches count more.</i></div>", unsafe_allow_html=True)
+        with st.expander("Market Mood", expanded=False):
+            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'><b>📈 Risk-On</b> &mdash; Market hungry for risk, bullish for commodities.<br><b>🛡️ Risk-Off</b> &mdash; Market fearful/defensive. Bullish for gold (safe haven), can hurt oil demand.<br><br><i>Derived from geopolitical intensity + Fed bias + sentiment.</i></div>", unsafe_allow_html=True)
+        with st.expander("DXY Bias", expanded=False):
+            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Tracks US Dollar Index direction.<br><br><b>Bullish Dollar</b> = commodities get cheaper &darr;<br><b>Bearish Dollar</b> = commodities get pricier &uarr;<br><br><i>Rule: weak dollar = strong commodities.</i></div>", unsafe_allow_html=True)
+        with st.expander("Supply (WTI Only)", expanded=False):
+            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'><b>Tight</b>: Supply disruption fears (OPEC cuts, sanctions, war) &mdash; bullish.<br><b>Balanced</b>: Supply meeting demand &mdash; neutral.<br><b>Oversupply</b>: Too much oil in market &mdash; bearish.<br><br><i>Detects OPEC, EIA, inventory, production keywords.</i></div>", unsafe_allow_html=True)
+        with st.expander("VADER Score", expanded=False):
+            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Each article scored <b>&minus;1.0</b> to <b>+1.0</b>:<br><br><span style='color:#30D158;'>🟢 > +0.05</span>: Positive/optimistic<br><span style='color:#FFD60A;'>🟡 &minus;0.05 to +0.05</span>: Neutral<br><span style='color:#FF453A;'>🔴 < &minus;0.05</span>: Negative/pessimistic<br><br><i>Raw emotional tone of each headline.</i></div>", unsafe_allow_html=True)
+        with st.expander("Contrarian Alert (Gold)", expanded=False):
+            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'><b>⚠️ YES</b>: Sentiment is over-leveraged. Could reverse. Be cautious.<br><b>✅ Normal</b>: Sentiment within normal bounds. No warning.<br><br><i>When everyone is bullish, who's left to buy?</i></div>", unsafe_allow_html=True)
+
     if "commodity" not in st.session_state:
         st.session_state["commodity"] = "gold"
 
@@ -423,16 +438,24 @@ def main():
 
     st.markdown(f'<div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:16px;">Intelligence Feed</div><div style="color:#636366;font-size:12px;font-family:{APPLE_FONT};margin-bottom:12px;">{len(data["articles"])} articles from {cm["total_articles"]} collected &middot; {cm["rss_count"]} RSS &middot; {cm["web_count"]} web</div>', unsafe_allow_html=True)
 
-    articles_to_show = data["articles"][:20]
-    if articles_to_show:
-        for i, article in enumerate(articles_to_show):
-            cat_str = " &middot; ".join(article.get("categories", []))
-            vader_s = article.get("vader_score", 0)
-            ic = "#30D158" if vader_s > 0.05 else "#FF453A" if vader_s < -0.05 else "#FFD60A"
-            ks = article.get("keyword_score", 0)
-            badge = f'<span style="background:rgba(255,255,255,0.06);color:#86868B;font-size:11px;padding:2px 8px;border-radius:980px;font-family:{APPLE_FONT};font-weight:600;">{ks}</span>'
-            src = f'<div style="margin-top:6px;"><a href="{article["link"]}" style="font-size:12px;font-family:{APPLE_FONT};">Source</a></div>' if article.get("link") else ""
-            st.markdown(f'<div style="background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:{ic};flex-shrink:0;"></div><div style="color:#F5F5F7;font-size:14px;font-weight:500;font-family:{APPLE_FONT};flex:1;">{article["title"][:90]}</div>{badge}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};margin-bottom:4px;">{cat_str}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};">VADER <span style="color:{ic};font-weight:600;">{vader_s:.3f}</span></div><div style="color:#AEAEB2;font-size:13px;line-height:1.5;margin-top:6px;font-family:{APPLE_FONT};">{article["summary"][:200]}</div>{src}</div>', unsafe_allow_html=True)
+        articles_to_show = data["articles"][:20]
+        if articles_to_show:
+            for i, article in enumerate(articles_to_show):
+                cat_str = " &middot; ".join(article.get("categories", []))
+                vader_s = article.get("vader_score", 0)
+                ic = "#30D158" if vader_s > 0.05 else "#FF453A" if vader_s < -0.05 else "#FFD60A"
+                ks = article.get("keyword_score", 0)
+                badge = f'<span style="background:rgba(255,255,255,0.06);color:#86868B;font-size:11px;padding:2px 8px;border-radius:980px;font-family:{APPLE_FONT};font-weight:600;">{ks}</span>'
+                src = f'<div style="margin-top:6px;"><a href="{article["link"]}" style="font-size:12px;font-family:{APPLE_FONT};">Source</a></div>' if article.get("link") else ""
+                fetch_str = ""
+                ft = article.get("fetched_at", "")
+                try:
+                    fetch_dt = datetime.fromisoformat(ft.replace("Z", "+00:00")).astimezone(MYT)
+                    fetch_str = fetch_dt.strftime("%I:%M %p")
+                except Exception:
+                    fetch_str = ""
+                ts_line = f'<div style="color:#636366;font-size:10px;font-family:{APPLE_FONT};margin-top:4px;">Extracted {fetch_str} MYT</div>' if fetch_str else ""
+                st.markdown(f'<div style="background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:{ic};flex-shrink:0;"></div><div style="color:#F5F5F7;font-size:14px;font-weight:500;font-family:{APPLE_FONT};flex:1;">{article["title"][:90]}</div>{badge}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};margin-bottom:4px;">{cat_str}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};">VADER <span style="color:{ic};font-weight:600;">{vader_s:.3f}</span></div>{ts_line}<div style="color:#AEAEB2;font-size:13px;line-height:1.5;margin-top:6px;font-family:{APPLE_FONT};">{article["summary"][:200]}</div>{src}</div>', unsafe_allow_html=True)
 
 
 
