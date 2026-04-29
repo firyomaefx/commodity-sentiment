@@ -203,7 +203,11 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ You're already subscribed, *{username}*\\!\n\n"
             "You'll receive daily reports at 6:01 AM MYT\\.\n\n"
-            "Commands:\n/report — Gold report now\n/report\\_wti — WTI report now\n/stop — Unsubscribe\n/status — Check status",
+            "Commands:\n"
+            "/report — Gold report now\n"
+            "/report\\_wti — WTI report now\n"
+            "/stop — Unsubscribe\n"
+            "/status — Check status",
             parse_mode="MarkdownV2",
         )
         return
@@ -214,17 +218,21 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🥇 Gold Report", callback_data="report_gold"),
          InlineKeyboardButton("🛢️ WTI Report", callback_data="report_wti")],
-        [InlineKeyboardButton("☕ Support RM0.99", url=SENANGPAY_URL)],
+        [InlineKeyboardButton("☕ Support RM1.99", url=SENANGPAY_URL)],
     ])
 
     await update.message.reply_text(
         f"Welcome, *{username}*\\! 🎉\n\n"
         "You're now subscribed to *Commodity Sentiment Reports*\\.\n\n"
-        "📅 Daily reports: *6:01 AM MYT*\n"
-        "🥇 Gold: /report\n"
-        "🛢️ WTI: /report\\_wti\n"
-        "🚫 Unsubscribe: /stop\n"
-        "☕ Support us: *RM0\\.99* via SenangPay\n\n"
+        "🌟 *Your Perks:*\n"
+        "🕕 Daily Gold \\+ WTI reports at *6:01 AM MYT*\n"
+        "📊 On-demand /report \\| /report\\_wti anytime\n"
+        "📱 Instant delivery to your phone\n\n"
+        "Commands:\n"
+        "🥇 /report — Gold report now\n"
+        "🛢️ /report\\_wti — WTI report now\n"
+        "🚫 /stop — Unsubscribe\n\n"
+        "☕ Support us: *RM1\\.99* via SenangPay\n\n"
         "Tap the buttons below\\!",
         parse_mode="MarkdownV2",
         reply_markup=keyboard,

@@ -318,19 +318,8 @@ def main():
     """, unsafe_allow_html=True)
 
     with st.sidebar:
-        st.markdown(f"<div style='color:#86868B;font-size:13px;font-weight:600;letter-spacing:0.1em;margin-bottom:8px;font-family:{APPLE_FONT};'>METRICS GUIDE</div>", unsafe_allow_html=True)
-        with st.expander("Sentiment Score", expanded=False):
-            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Range <b>&minus;100</b> to <b>+100</b>.<br><br><span style='color:#30D158;'>+50 to +100</span>: Extremely Bullish<br><span style='color:#34C759;'>+20 to +50</span>: Bullish<br><span style='color:#FFD60A;'>-20 to +20</span>: Neutral<br><span style='color:#FF453A;'>-50 to -20</span>: Bearish<br><span style='color:#FF3B30;'>-100 to -50</span>: Extremely Bearish<br><br><i>VADER emotional tone x keyword relevance. Articles with stronger keyword matches count more.</i></div>", unsafe_allow_html=True)
-        with st.expander("Market Mood", expanded=False):
-            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'><b>📈 Risk-On</b> &mdash; Market hungry for risk, bullish for commodities.<br><b>🛡️ Risk-Off</b> &mdash; Market fearful/defensive. Bullish for gold (safe haven), can hurt oil demand.<br><br><i>Derived from geopolitical intensity + Fed bias + sentiment.</i></div>", unsafe_allow_html=True)
-        with st.expander("DXY Bias", expanded=False):
-            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Tracks US Dollar Index direction.<br><br><b>Bullish Dollar</b> = commodities get cheaper &darr;<br><b>Bearish Dollar</b> = commodities get pricier &uarr;<br><br><i>Rule: weak dollar = strong commodities.</i></div>", unsafe_allow_html=True)
-        with st.expander("Supply (WTI Only)", expanded=False):
-            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'><b>Tight</b>: Supply disruption fears (OPEC cuts, sanctions, war) &mdash; bullish.<br><b>Balanced</b>: Supply meeting demand &mdash; neutral.<br><b>Oversupply</b>: Too much oil in market &mdash; bearish.<br><br><i>Detects OPEC, EIA, inventory, production keywords.</i></div>", unsafe_allow_html=True)
-        with st.expander("VADER Score", expanded=False):
-            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Each article scored <b>&minus;1.0</b> to <b>+1.0</b>:<br><br><span style='color:#30D158;'>🟢 > +0.05</span>: Positive/optimistic<br><span style='color:#FFD60A;'>🟡 &minus;0.05 to +0.05</span>: Neutral<br><span style='color:#FF453A;'>🔴 < &minus;0.05</span>: Negative/pessimistic<br><br><i>Raw emotional tone of each headline.</i></div>", unsafe_allow_html=True)
-        with st.expander("Contrarian Alert (Gold)", expanded=False):
-            st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'><b>⚠️ YES</b>: Sentiment is over-leveraged. Could reverse. Be cautious.<br><b>✅ Normal</b>: Sentiment within normal bounds. No warning.<br><br><i>When everyone is bullish, who's left to buy?</i></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:#86868B;font-size:13px;font-weight:600;letter-spacing:0.1em;margin-bottom:8px;font-family:{APPLE_FONT};'>ABOUT</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:#86868B;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Real-time sentiment intelligence for Gold & WTI Crude Oil.<br><br>VADER NLP + Rule-Based engine scanning RSS feeds and news articles.<br><br>Daily Telegram report at <b>6:01 AM MYT</b>.<br><br><a href='https://t.me/PedotTTRG' style='color:#0A84FF;'>Prepared by @PedotTTRG</a></div>", unsafe_allow_html=True)
 
     if "commodity" not in st.session_state:
         st.session_state["commodity"] = "gold"
@@ -353,6 +342,10 @@ def main():
     if st.button("Refresh Analysis", use_container_width=False):
         st.cache_data.clear()
         st.rerun()
+
+    TELEGRAM_BOT = os.environ.get("TELEGRAM_BOT_USERNAME", "SentimentIntelligence26Bot")
+    SENANGPAY_URL = os.environ.get("SENANGPAY_URL", "https://app.senangpay.my/payment/177739832230")
+    st.markdown(f'<div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;"><a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,122,255,0.15);border:1px solid rgba(0,122,255,0.3);border-radius:980px;padding:10px 22px;color:#0A84FF;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;"><span style="font-size:16px;">✈️</span> Subscribe on Telegram</a><a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,159,10,0.15);border:1px solid rgba(255,159,10,0.3);border-radius:980px;padding:10px 22px;color:#FF9F0A;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;"><span style="font-size:16px;">☕</span> Support for RM1.99</a></div>', unsafe_allow_html=True)
 
     result, data, price_data = fetch_and_analyze(commodity)
 
@@ -436,6 +429,20 @@ def main():
 
     st.markdown("<div style='border-top: 1px solid rgba(255,255,255,0.06); margin: 28px 0;'></div>", unsafe_allow_html=True)
 
+    st.markdown(f"<div style='color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:12px;'>How to Read</div>", unsafe_allow_html=True)
+    g1, g2, g3 = st.columns(3)
+    with g1:
+        st.markdown(f"<div style='background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;'><div style='color:#F5F5F7;font-size:13px;font-weight:600;font-family:{APPLE_FONT};margin-bottom:6px;'>Sentiment Score</div><div style='color:#86868B;font-size:11px;line-height:1.5;font-family:{APPLE_FONT};'>Range &minus;100 to +100.<br><span style='color:#30D158;'>+50/+100</span> Bullish &middot; <span style='color:#FF453A;'>&minus;50/&minus;100</span> Bearish<br><span style='color:#FFD60A;'>-20/+20</span> Neutral<br><i>VADER x keyword weight</i></div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;'><div style='color:#F5F5F7;font-size:13px;font-weight:600;font-family:{APPLE_FONT};margin-bottom:6px;'>DXY Bias</div><div style='color:#86868B;font-size:11px;line-height:1.5;font-family:{APPLE_FONT};'>US Dollar direction.<br>Weak dollar = commodities go up<br>Strong dollar = commodities go down</div></div>", unsafe_allow_html=True)
+    with g2:
+        st.markdown(f"<div style='background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;'><div style='color:#F5F5F7;font-size:13px;font-weight:600;font-family:{APPLE_FONT};margin-bottom:6px;'>Market Mood</div><div style='color:#86868B;font-size:11px;line-height:1.5;font-family:{APPLE_FONT};'>📈 Risk-On = bullish for commodities<br>🛡️ Risk-Off = safe haven (gold up, oil demand down)</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;'><div style='color:#F5F5F7;font-size:13px;font-weight:600;font-family:{APPLE_FONT};margin-bottom:6px;'>Contrarian Alert</div><div style='color:#86868B;font-size:11px;line-height:1.5;font-family:{APPLE_FONT};'>⚠️ YES = sentiment over-leveraged, reversal possible<br>✅ Normal = within safe range</div></div>", unsafe_allow_html=True)
+    with g3:
+        st.markdown(f"<div style='background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;'><div style='color:#F5F5F7;font-size:13px;font-weight:600;font-family:{APPLE_FONT};margin-bottom:6px;'>VADER (per article)</div><div style='color:#86868B;font-size:11px;line-height:1.5;font-family:{APPLE_FONT};'>🟢 > +0.05 positive article<br>🟡 &minus;0.05 to +0.05 neutral<br>🔴 < &minus;0.05 negative article</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;'><div style='color:#F5F5F7;font-size:13px;font-weight:600;font-family:{APPLE_FONT};margin-bottom:6px;'>Supply (WTI Only)</div><div style='color:#86868B;font-size:11px;line-height:1.5;font-family:{APPLE_FONT};'>Tight = bullish (OPEC cuts, war)<br>Balanced = neutral<br>Oversupply = bearish</div></div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='border-top: 1px solid rgba(255,255,255,0.06); margin: 28px 0;'></div>", unsafe_allow_html=True)
+
     st.markdown(f'<div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:16px;">Intelligence Feed</div><div style="color:#636366;font-size:12px;font-family:{APPLE_FONT};margin-bottom:12px;">{len(data["articles"])} articles from {cm["total_articles"]} collected &middot; {cm["rss_count"]} RSS &middot; {cm["web_count"]} web</div>', unsafe_allow_html=True)
 
     articles_to_show = data["articles"][:20]
@@ -459,14 +466,11 @@ def main():
 
 
 
-    TELEGRAM_BOT = os.environ.get("TELEGRAM_BOT_USERNAME", "SentimentIntelligence26Bot")
-    SENANGPAY_URL = os.environ.get("SENANGPAY_URL", "https://app.senangpay.my/payment/177739832230")
-
     st.markdown("<div style='border-top: 1px solid rgba(255,255,255,0.06); margin: 28px 0;'></div>", unsafe_allow_html=True)
 
-    st.markdown(f'<div style="display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:16px;"><a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:rgba(0,122,255,0.12);border:1px solid rgba(0,122,255,0.25);border-radius:980px;padding:12px 28px;color:#0A84FF;font-family:{APPLE_FONT};font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s ease;"><span style="font-size:18px;">✈️</span> Subscribe on Telegram</a><a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,159,10,0.12);border:1px solid rgba(255,159,10,0.25);border-radius:980px;padding:12px 28px;color:#FF9F0A;font-family:{APPLE_FONT};font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s ease;"><span style="font-size:18px;">☕</span> Support for RM0.99</a></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:16px;"><a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:rgba(0,122,255,0.12);border:1px solid rgba(0,122,255,0.25);border-radius:980px;padding:12px 28px;color:#0A84FF;font-family:{APPLE_FONT};font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s ease;"><span style="font-size:18px;">✈️</span> Subscribe on Telegram</a><a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,159,10,0.12);border:1px solid rgba(255,159,10,0.25);border-radius:980px;padding:12px 28px;color:#FF9F0A;font-family:{APPLE_FONT};font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s ease;"><span style="font-size:18px;">☕</span> Support for RM1.99</a></div>', unsafe_allow_html=True)
 
-    st.markdown(f'<div style="text-align:center;color:#636366;font-size:11px;font-family:{APPLE_FONT};margin-bottom:20px;">Daily reports at 6:01 AM MYT &middot; /report /report\\_wti for on-demand &middot; VADER + Rule-Based Engine</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align:center;color:#636366;font-size:11px;font-family:{APPLE_FONT};margin-bottom:20px;">Daily reports at 6:01 AM MYT &middot; /report /report\\_wti for on-demand &middot; VADER + Rule-Based Engine<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True)
 
     try:
         from streamlit_autorefresh import st_autorefresh
