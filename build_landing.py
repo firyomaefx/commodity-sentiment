@@ -1,10 +1,12 @@
 """Generate a static landing.html from live data — run every 5 minutes.
-Serves as SEO-friendly, LLM-readable snapshot of the dashboard."""
+Serves as SEO-friendly, LLM-readable snapshot of the dashboard.
+OUTPUT IS MINIFIED: removes Google Fonts, strips whitespace, compresses JSON-LD."""
 import os
 import sys
 import json
 import threading
 import time
+import re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import COMMODITY_CONFIGS
@@ -14,6 +16,9 @@ from groq_client import GroqAnalyzer
 
 GROQ = GroqAnalyzer()
 OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "landing.html")
+
+# System font stack — no external font requests
+FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
 
 def _run_analysis(commodity):
@@ -39,22 +44,39 @@ def _build_headline_cards(articles, limit=12):
     for a in articles[:limit]:
         vs = a.get("vader_score", 0)
         tone = "positive" if vs > 0.05 else "negative" if vs < -0.05 else "neutral"
-        age = a.get("age", "")
-        title = a.get("title", "")[:90]
-        link = a.get("link", "")
-        published = a.get("published", "")
         cards.append({
-            "title": title,
-            "link": link,
+            "title": a.get("title", "")[:90],
+            "link": a.get("link", ""),
             "tone": tone,
-            "age": age,
-            "published": published,
+            "age": a.get("age", ""),
+            "published": a.get("published", ""),
         })
     return cards
 
 
+def _minify_css(css_raw):
+    css = re.sub(r"/\*.*?\*/", "", css_raw, flags=re.S)
+    css = re.sub(r"\n\s*", "", css)
+    css = re.sub(r";\s*}", "}", css)
+    css = re.sub(r"\s*:\s*", ":", css)
+    css = re.sub(r"\s*;\s*", ";", css)
+    css = re.sub(r"\s*,\s*", ",", css)
+    css = re.sub(r"\s*\{\s*", "{", css)
+    css = re.sub(r"\s*\}\s*", "}", css)
+    css = re.sub(r"\s+", " ", css).strip()
+    return css
+
+
+def _minify_html(html_raw):
+    html = re.sub(r"\n\s*", "", html_raw)
+    html = re.sub(r">\s+<", "><", html)
+    html = re.sub(r"\s{2,}", " ", html)
+    html = re.sub(r"\s*>", ">", html)
+    html = re.sub(r"\s{2,}", " ", html).strip()
+    return html
+
+
 def _build_html(gold_data, wti_data, fcpo_data):
-    """Generate the full static HTML with OG, Twitter, JSON-LD, semantic HTML."""
     g_result, g_articles, g_price, _ = gold_data
     w_result, w_articles, w_price, _ = wti_data
     f_result, f_articles, f_price, f_market = fcpo_data
@@ -66,217 +88,142 @@ def _build_html(gold_data, wti_data, fcpo_data):
     wti_score = w_result["analysis_2_sentiment"]["wti_sentiment_score"]
     fcpo_score = f_result["analysis_2_sentiment"]["fcpo_sentiment_score"]
 
-    gold_headlines = _build_headline_cards(g_articles["articles"])
-    wti_headlines = _build_headline_cards(w_articles["articles"])
-    fcpo_headlines = _build_headline_cards(f_articles["articles"])
+    gh = _build_headline_cards(g_articles["articles"])
+    wh = _build_headline_cards(w_articles["articles"])
+    fh = _build_headline_cards(f_articles["articles"])
 
     from datetime import datetime, timezone, timedelta
     now_str = datetime.now(timezone(timedelta(hours=8))).strftime("%d %b %Y, %I:%M %p")
     updated_iso = datetime.now(timezone.utc).isoformat()
 
-    # Price formatting
     def _fmt(p):
         if p and p.get("price"):
             s = "+" if p.get("change", 0) >= 0 else ""
             return f"${p['price']:,.2f} ({s}{p.get('change', 0):.2f})"
         return "—"
 
-    def _fmt_fcpo(p, m):
+    def _fmtf(p):
         if p and p.get("price"):
             s = "+" if p.get("change", 0) >= 0 else ""
             return f"RM{p['price']:,.2f} ({s}{p.get('change', 0):.2f})"
         return "—"
 
-    gold_price_str = _fmt(g_price)
-    wti_price_str = _fmt(w_price)
-    fcpo_price_str = _fmt_fcpo(f_price, f_market)
+    gp = _fmt(g_price)
+    wp = _fmt(w_price)
+    fp = _fmtf(f_price)
 
-    og_desc = (
-        f"Gold: {gold_bias} ({gold_score:,.1f}) | "
-        f"WTI: {wti_bias} ({wti_score:,.1f}) | "
-        f"FCPO: {fcpo_bias} ({fcpo_score:,.1f})"
-    )
+    og_desc = f"Gold: {gold_bias} ({gold_score:,.1f}) | WTI: {wti_bias} ({wti_score:,.1f}) | FCPO: {fcpo_bias} ({fcpo_score:,.1f})"
 
-    def _badge_color(bias):
-        return {
-            "Strong Buy": "#30D158", "Buy": "#34C759",
-            "Neutral": "#FFD60A",
-            "Sell": "#FF453A", "Strong Sell": "#FF3B30",
-        }.get(bias, "#86868B")
+    def _bc(bias):
+        return {"Strong Buy": "#30D158", "Buy": "#34C759", "Neutral": "#FFD60A",
+                "Sell": "#FF453A", "Strong Sell": "#FF3B30"}.get(bias, "#86868B")
 
-    def _headline_html(headlines):
-        lines = []
+    def _hh(headlines):
+        parts = []
         for h in headlines:
             marker = "🟢" if h["tone"] == "positive" else "🔴" if h["tone"] == "negative" else "🟡"
-            age = f"<span style='color:#0A84FF;'>{h['age']} ago</span>" if h["age"] else ""
-            link_open = f'<a href="{h["link"]}" target="_blank" style="color:#1a1a1a;text-decoration:none;">' if h["link"] else ''
-            link_close = '</a>' if h["link"] else ''
-            lines.append(
-                f'<article itemscope itemtype="https://schema.org/NewsArticle">'
-                f'<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e5e5;">'
-                f'<span style="font-size:14px;flex-shrink:0;">{marker}</span>'
-                f'<div style="flex:1;">'
-                f'<div itemprop="headline" style="font-size:14px;color:#1a1a1a;font-weight:500;margin-bottom:2px;">{link_open}{h["title"]}{link_close}</div>'
-                f'<time itemprop="datePublished" datetime="{h["published"]}" style="font-size:12px;color:#666;">{age}</time>'
-                f'</div></div></article>'
+            age = f"\u003cspan style='color:#0A84FF'\u003e{h['age']} ago\u003c/span\u003e" if h["age"] else ""
+            link_o = f"\u003ca href='{h['link']}' target='_blank' style='color:#1a1a1a;text-decoration:none'\u003e" if h["link"] else ""
+            link_c = "\u003c/a\u003e" if h["link"] else ""
+            parts.append(
+                f"\u003carticle itemscope itemtype='https://schema.org/NewsArticle'\u003e"
+                f"\u003cdiv style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e5e5'\u003e"
+                f"\u003cspan style='font-size:14px;flex-shrink:0'\u003e{marker}\u003c/span\u003e"
+                f"\u003cdiv style='flex:1'\u003e"
+                f"\u003cdiv itemprop='headline' style='font-size:14px;color:#1a1a1a;font-weight:500;margin-bottom:2px'\u003e{link_o}{h['title']}{link_c}\u003c/div\u003e"
+                f"\u003ctime itemprop='datePublished' datetime='{h['published']}' style='font-size:12px;color:#666'\u003e{age}\u003c/time\u003e"
+                f"\u003c/div\u003e\u003c/div\u003e\u003c/article\u003e"
             )
-        return "\n".join(lines)
+        return "\n".join(parts)
 
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Commodity Sentiment Intelligence — Gold, WTI, FCPO Real-Time Dashboard</title>
-<meta name="description" content="{og_desc}. Real-time sentiment analysis powered by Groq AI + VADER NLP. Updated every 5 minutes.">
+    css_raw = (
+        f":root{{--bg:#F5F5F7;--card:#fff;--text:#1a1a1a;--muted:#666;--accent:#0A84FF}}"
+        f"*{{box-sizing:border-box;margin:0;padding:0;font-family:{FONT}}}"
+        f"body{{background:var(--bg);color:var(--text);line-height:1.5}}"
+        f".container{{max-width:960px;margin:0 auto;padding:24px 16px}}"
+        f"header{{text-align:center;padding:40px 0 24px}}"
+        f"header h1{{font-size:32px;font-weight:700;letter-spacing:-0.02em;margin-bottom:8px}}"
+        f"header p{{color:var(--muted);font-size:15px;margin-bottom:20px}}"
+        f".launch-btn{{display:inline-block;background:#000;color:#fff;padding:14px 32px;border-radius:999px;font-weight:600;text-decoration:none;font-size:15px}}"
+        f".updated{{font-size:13px;color:#999;margin-top:8px}}"
+        f".badge{{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;margin-left:8px}}"
+        f".grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:32px 0}}"
+        f".card{{background:var(--card);border:1px solid #e0e0e0;border-radius:20px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}}"
+        f".card h2{{font-size:22px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}}"
+        f".price{{font-size:28px;font-weight:700;color:var(--text);margin:8px 0}}"
+        f".score{{font-size:14px;color:var(--muted);margin-bottom:12px}}"
+        f".headlines{{background:var(--card);border:1px solid #e0e0e0;border-radius:20px;padding:24px;margin-top:16px}}"
+        f".headlines h3{{font-size:16px;font-weight:600;margin-bottom:16px;text-transform:uppercase;letter-spacing:0.05em}}"
+        f"footer{{text-align:center;color:#999;font-size:13px;padding:40px 0}}"
+        f"footer a{{color:var(--accent);text-decoration:none}}"
+    )
 
-<!-- Open Graph / Facebook -->
-<meta property="og:title" content="Commodity Sentiment • {gold_bias} | {wti_bias} | {fcpo_bias}">
-<meta property="og:description" content="{og_desc}. Live sentiment dashboard tracking Gold, WTI Crude Oil & FCPO Palm Oil via AI-powered analysis.">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://tengkolok-commoditysentiment.hf.space">
-<meta property="og:locale" content="en_US">
+    jsonld = json.dumps({
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Commodity Sentiment Intelligence Dashboard",
+        "description": og_desc,
+        "url": "https://tengkolok-commoditysentiment.hf.space",
+        "dateModified": updated_iso,
+        "publisher": {"@type": "Person", "name": "@PedotTTRG", "url": "https://t.me/PedotTTRG"},
+        "about": [
+            {"@type": "Thing", "name": "Gold (XAU/USD)", "description": f"Sentiment score: {gold_score:,.1f} / Bias: {gold_bias}. Price: {gp}"},
+            {"@type": "Thing", "name": "WTI Crude Oil", "description": f"Sentiment score: {wti_score:,.1f} / Bias: {wti_bias}. Price: {wp}"},
+            {"@type": "Thing", "name": "FCPO Crude Palm Oil", "description": f"Sentiment score: {fcpo_score:,.1f} / Bias: {fcpo_bias}. Price: {fp}"}
+        ]
+    }, separators=(",", ":"), ensure_ascii=False)
 
-<!-- Twitter Card -->
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="{now_str} — Commodity Sentiment Report">
-<meta name="twitter:description" content="Gold: {gold_price_str} • WTI: {wti_price_str} • FCPO: {fcpo_price_str}">
+    html_raw = (
+        f"\u003c!DOCTYPE html\u003e\u003chtml lang='en'\u003e\u003chead\u003e"
+        f"\u003cmeta charset='UTF-8'\u003e"
+        f"\u003cmeta name='viewport' content='width=device-width,initial-scale=1.0'\u003e"
+        f"\u003ctitle\u003eCommodity Sentiment — Gold, WTI, FCPO Real-Time Dashboard\u003c/title\u003e"
+        f"\u003cmeta name='description' content='{og_desc}. Real-time sentiment via Groq AI + VADER NLP. Updated every 5 minutes.'\u003e"
+        f"\u003cmeta property='og:title' content='Commodity Sentiment • {gold_bias} | {wti_bias} | {fcpo_bias}'\u003e"
+        f"\u003cmeta property='og:description' content='{og_desc}. Live sentiment dashboard.'\u003e"
+        f"\u003cmeta property='og:type' content='website'\u003e"
+        f"\u003cmeta property='og:url' content='https://tengkolok-commoditysentiment.hf.space'\u003e"
+        f"\u003cmeta property='og:locale' content='en_US'\u003e"
+        f"\u003cmeta name='twitter:card' content='summary_large_image'\u003e"
+        f"\u003cmeta name='twitter:title' content='{now_str} — Commodity Sentiment'\u003e"
+        f"\u003cmeta name='twitter:description' content='Gold: {gp} • WTI: {wp} • FCPO: {fp}'\u003e"
+        f"\u003cscript type='application/ld+json'\u003e{jsonld}\u003c/script\u003e"
+        f"\u003cstyle\u003e{_minify_css(css_raw)}\u003c/style\u003e"
+        f"\u003c/head\u003e\u003cbody\u003e"
+        f"\u003cheader\u003e\u003ch1\u003eCommodity Sentiment Intelligence\u003c/h1\u003e"
+        f"\u003cp\u003eReal-time sentiment for Gold, WTI Crude Oil &amp; FCPO — Groq AI + VADER NLP\u003c/p\u003e"
+        f"\u003cp class='updated'\u003eLast updated: {now_str} MYT • Auto-refresh 5 min\u003c/p\u003e"
+        f"\u003ca href='./dashboard' class='launch-btn'\u003eLaunch Dashboard 🚀\u003c/a\u003e\u003c/header\u003e"
+        f"\u003cdiv class='container'\u003e"
+        f"\u003csection itemscope itemtype='https://schema.org/Dataset'\u003e"
+        f"\u003cmeta itemprop='name' content='Commodity Sentiment Scores'\u003e"
+        f"\u003cmeta itemprop='dateModified' content='{updated_iso}'\u003e"
+        f"\u003cdiv class='grid'\u003e"
+        + _card_html("Gold", "GC=F", "🥇", gold_bias, gp, gold_score, _bc(gold_bias), _hh(gh))
+        + _card_html("WTI Crude Oil", "CL=F", "🛢️", wti_bias, wp, wti_score, _bc(wti_bias), _hh(wh))
+        + _card_html("FCPO Crude Palm Oil", "", "🌴", fcpo_bias, fp, fcpo_score, _bc(fcpo_bias), _hh(fh), myr=True)
+        + "\u003c/div\u003e\u003c/section\u003e"
+        f"\u003cfooter\u003ePrepared by \u003ca href='https://t.me/PedotTTRG' target='_blank'\u003e@PedotTTRG\u003c/a\u003e • Daily reports at 6:01 AM MYT • Groq AI + VADER NLP\u003c/footer\u003e"
+        f"\u003c/div\u003e\u003c/body\u003e\u003c/html\u003e"
+    )
 
-<!-- JSON-LD Structured Data -->
-<script type="application/ld+json">
-{{
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Commodity Sentiment Intelligence Dashboard",
-  "description": "{og_desc}",
-  "url": "https://tengkolok-commoditysentiment.hf.space",
-  "dateModified": "{updated_iso}",
-  "publisher": {{
-    "@type": "Person",
-    "name": "@PedotTTRG",
-    "url": "https://t.me/PedotTTRG"
-  }},
-  "about": [
-    {{
-      "@type": "Thing",
-      "name": "Gold (XAU/USD)",
-      "description": "Sentiment score: {gold_score:,.1f} / Bias: {gold_bias}. Price: {gold_price_str}"
-    }},
-    {{
-      "@type": "Thing",
-      "name": "WTI Crude Oil",
-      "description": "Sentiment score: {wti_score:,.1f} / Bias: {wti_bias}. Price: {wti_price_str}"
-    }},
-    {{
-      "@type": "Thing",
-      "name": "FCPO Crude Palm Oil",
-      "description": "Sentiment score: {fcpo_score:,.1f} / Bias: {fcpo_bias}. Price: {fcpo_price_str}"
-    }}
-  ]
-}}
-</script>
+    return _minify_html(html_raw)
 
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-:root {{ --bg: #F5F5F7; --card: #ffffff; --text: #1a1a1a; --muted: #666; --accent: #0A84FF; }}
-* {{ box-sizing:border-box; margin:0; padding:0; font-family: 'Inter', -apple-system, sans-serif; }}
-body {{ background: var(--bg); color: var(--text); line-height:1.5; }}
-.container {{ max-width:960px; margin:0 auto; padding:24px 16px; }}
-header {{ text-align:center; padding:40px 0 24px; }}
-header h1 {{ font-size:32px; font-weight:700; letter-spacing:-0.02em; margin-bottom:8px; }}
-header p {{ color: var(--muted); font-size:15px; margin-bottom:20px; }}
-.launch-btn {{ display:inline-block; background:#000; color:#fff; padding:14px 32px; border-radius:999px; font-weight:600; text-decoration:none; font-size:15px; transition:opacity 0.2s; }}
-.launch-btn:hover {{ opacity:0.85; }}
-.updated {{ font-size:13px; color:#999; margin-top:8px; }}
 
-.badge {{ display:inline-block; background:#e8f5e9; color:#1b5e20; padding:4px 12px; border-radius:999px; font-size:12px; font-weight:600; margin-left:8px; }}
-.badge-sell {{ background:#ffebee; color:#b71c1c; }}
-.badge-neutral {{ background:#fff8e1; color:#5d4037; }}
-
-.grid {{ display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:16px; margin:32px 0; }}
-.card {{ background:var(--card); border:1px solid #e0e0e0; border-radius:20px; padding:24px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }}
-.card h2 {{ font-size:22px; font-weight:600; margin-bottom:8px; display:flex;align-items:center;gap:8px; }}
-.price {{ font-size:28px; font-weight:700; color:var(--text); margin:8px 0; }}
-.score {{ font-size:14px; color:var(--muted); margin-bottom:12px; }}
-
-.headlines {{ background:var(--card); border:1px solid #e0e0e0; border-radius:20px; padding:24px; margin-top:16px; }}
-.headlines h3 {{ font-size:16px; font-weight:600; margin-bottom:16px; text-transform:uppercase; letter-spacing:0.05em; }}
-
-footer {{ text-align:center; color:#999; font-size:13px; padding:40px 0; }}
-footer a {{ color:var(--accent); text-decoration:none; }}
-</style>
-</head>
-<body>
-
-<header>
-<h1>Commodity Sentiment Intelligence</h1>
-<p>Real-time sentiment for Gold, WTI Crude Oil &amp; FCPO — powered by Groq AI + VADER NLP</p>
-<p class="updated">Last updated: {now_str} MYT &middot; Auto-refreshes every 5 minutes</p>
-<a href="./dashboard" class="launch-btn">Launch Dashboard 🚀</a>
-</header>
-
-<div class="container">
-
-<section itemscope itemtype="https://schema.org/Dataset">
-<meta itemprop="name" content="Commodity Sentiment Scores">
-<meta itemprop="dateModified" content="{updated_iso}">
-
-<div class="grid">
-
-<!-- Gold -->
-<article class="card" itemprop="about" itemscope itemtype="https://schema.org/FinancialProduct">
-<meta itemprop="name" content="Gold (XAU/USD)">
-<h2 itemprop="tickerSymbol">🥇 Gold <span class="badge" style="background:{_badge_color(gold_bias)}22;color:{_badge_color(gold_bias)};">{gold_bias}</span></h2>
-<div class="price" itemprop="price">{gold_price_str}</div>
-<div class="score">Sentiment: <strong>{gold_score:,.1f}</strong></div>
-<div class="headlines">
-<h3>Latest Headlines</h3>
-{_headline_html(gold_headlines)}
-</div>
-</article>
-
-<!-- WTI -->
-<article class="card" itemprop="about" itemscope itemtype="https://schema.org/FinancialProduct">
-<meta itemprop="name" content="WTI Crude Oil">
-<h2 itemprop="tickerSymbol">🛢️ WTI <span class="badge" style="background:{_badge_color(wti_bias)}22;color:{_badge_color(wti_bias)};">{wti_bias}</span></h2>
-<div class="price" itemprop="price">{wti_price_str}</div>
-<div class="score">Sentiment: <strong>{wti_score:,.1f}</strong></div>
-<div class="headlines">
-<h3>Latest Headlines</h3>
-{_headline_html(wti_headlines)}
-</div>
-</article>
-
-<!-- FCPO -->
-<article class="card" itemprop="about" itemscope itemtype="https://schema.org/FinancialProduct">
-<meta itemprop="name" content="FCPO Crude Palm Oil">
-<h2 itemprop="tickerSymbol">🌴 FCPO <span class="badge" style="background:{_badge_color(fcpo_bias)}22;color:{_badge_color(fcpo_bias)};">{fcpo_bias}</span></h2>
-<div class="price" itemprop="price">{fcpo_price_str}</div>
-<div class="score">Sentiment: <strong>{fcpo_score:,.1f}</strong> <span style="color:#666;font-size:12px;">MYR</span></div>
-<div class="headlines">
-<h3>Latest Headlines</h3>
-{_headline_html(fcpo_headlines)}
-</div>
-</article>
-
-</div>
-</section>
-
-<footer>
-Prepared by <a href="https://t.me/PedotTTRG" target="_blank">@PedotTTRG</a> &middot;
-Daily reports at 6:01 AM MYT &middot;
-Sentiment data: Groq AI + VADER NLP
-</footer>
-
-</div>
-</body>
-</html>
-"""
-    return html
+def _card_html(name, ticker, emoji, bias, price, score, badge_color, headlines_html, myr=False):
+    myr_tag = " \u003cspan style='color:#666;font-size:12px'\u003eMYR\u003c/span\u003e" if myr else ""
+    return (
+        f"\u003carticle class='card' itemprop='about' itemscope itemtype='https://schema.org/FinancialProduct'\u003e"
+        f"\u003cmeta itemprop='name' content='{name}'\u003e"
+        f"\u003ch2\u003e{emoji} {name.split()[0]} \u003cspan class='badge' style='background:{badge_color}22;color:{badge_color};'\u003e{bias}\u003c/span\u003e\u003c/h2\u003e"
+        f"\u003cdiv class='price' itemprop='price'\u003e{price}\u003c/div\u003e"
+        f"\u003cdiv class='score'\u003eSentiment: \u003cstrong\u003e{score:,.1f}\u003c/strong\u003e{myr_tag}\u003c/div\u003e"
+        f"\u003cdiv class='headlines'\u003e\u003ch3\u003eLatest Headlines\u003c/h3\u003e{headlines_html}\u003c/div\u003e"
+        f"\u003c/article\u003e"
+    )
 
 
 def build_and_save():
-    """Generate landing.html once."""
     try:
         gold = _run_analysis("gold")
         wti = _run_analysis("wti")
@@ -284,13 +231,13 @@ def build_and_save():
         html = _build_html(gold, wti, fcpo)
         with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
             f.write(html)
-        print(f"[landing] Generated {OUTPUT_PATH}")
+        size_kb = len(html.encode("utf-8")) / 1024
+        print(f"[landing] Generated {OUTPUT_PATH} ({size_kb:.1f} KB)")
     except Exception as e:
         print(f"[landing] Error: {e}")
 
 
 def run_background(interval_sec=300):
-    """Run builder in a background thread every N seconds."""
     def _loop():
         while True:
             build_and_save()
