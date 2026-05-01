@@ -1,7 +1,8 @@
 import feedparser
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
+from email.utils import parsedate_to_datetime
 from config import COMMODITY_CONFIGS
 
 try:
@@ -21,6 +22,66 @@ class DataCollector:
         })
         self.articles = []
         self._analyzer = None
+
+    def _parse_published(self, entry):
+        """Extract the original published datetime (UTC) from an RSS entry."""
+        # Try feedparser's parsed tuple first
+        pp = entry.get("published_parsed")
+        if pp:
+            try:
+                return datetime.utcfromtimestamp(
+                    (datetime(*pp[:6]) - datetime(1970, 1, 1)).total_seconds()
+                ).replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+        # Fallback: parse published string
+        ps = entry.get("published", "")
+        if ps:
+            try:
+                # Use email.utils which handles RFC 822
+                dt = parsedate_to_datetime(ps)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(timezone.utc)
+            except Exception:
+                pass
+        return None
+
+    @staticmethod
+    def _age_str(now, published_dt):
+        """Return human-readable age: '45m', '3h 20m', '1d'."""
+        if not published_dt:
+            return None
+        delta = now - published_dt.astimezone(timezone.utc)
+        total_secs = int(delta.total_seconds())
+        if total_secs < 0:
+            return None
+        if total_secs < 3600:
+            return f"{total_secs // 60}m"
+        if total_secs < 86400:
+            h = total_secs // 3600
+            m = (total_secs % 3600) // 60
+            return f"{h}h {m}m" if m else f"{h}h"
+        d = total_secs // 86400
+        return f"{d}d"
+
+    @staticmethod
+    def _parse_relative_time(text):
+        """Parse strings like '2 hours ago', '30 minutes ago' into datetime (UTC)."""
+        text = text.lower().strip()
+        now = datetime.now(timezone.utc)
+        import re as _re
+        # e.g. "2 hours ago", "4 h", "30 min"
+        m = _re.search(r'(\d+)\s*(?:h(?:ours?)?|hr?)\b', text)
+        if m:
+            return now - timedelta(hours=int(m.group(1)))
+        m = _re.search(r'(\d+)\s*(?:minutes?|min|m)\b', text)
+        if m:
+            return now - timedelta(minutes=int(m.group(1)))
+        m = _re.search(r'(\d+)\s*(?:days?|d)\b', text)
+        if m:
+            return now - timedelta(days=int(m.group(1)))
+        return None
 
     def _clean_html(self, text):
         if not text:
@@ -228,6 +289,10 @@ class DataCollector:
                     title = entry.get("title", "")
                     summary = self._clean_html(entry.get("summary", ""))
                     link = entry.get("link", "")
+                    published_dt = self._parse_published(entry)
+                    age_str = None
+                    if published_dt:
+                        age_str = self._age_str(datetime.now(timezone.utc), published_dt)
 
                     full_text = f"{title}. {summary}"
                     score, categories = self._keyword_match_score(full_text)
@@ -242,6 +307,8 @@ class DataCollector:
                             "categories": list(categories),
                             "source": "rss",
                             "fetched_at": datetime.now(timezone.utc).isoformat(),
+                            "published": published_dt.isoformat() if published_dt else "",
+                            "age": age_str,
                         })
             except (requests.RequestException, ValueError):
                 continue
@@ -265,6 +332,12 @@ class DataCollector:
                     snippet_el = result_block.select_one("div.BNeawe.s3v9rd, div.GI74Re, div.kY2Ob")
                     title = title_el.get_text(strip=True)
                     snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+                    import re as _re
+                    # Try to extract relative time from snippet or nearby text
+                    nearby = result_block.get_text(strip=True)
+                    age_dt = self._parse_relative_time(nearby)
+                    age_str = self._age_str(datetime.now(timezone.utc), age_dt) if age_dt else None
+
                     if not title or len(title) < 10:
                         continue
                     full_text = f"{title}. {snippet}"
@@ -278,6 +351,8 @@ class DataCollector:
                             "categories": list(categories),
                             "source": "web",
                             "fetched_at": datetime.now(timezone.utc).isoformat(),
+                            "published": age_dt.isoformat() if age_dt else "",
+                            "age": age_str,
                         })
             except (requests.RequestException, ValueError):
                 continue

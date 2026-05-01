@@ -178,7 +178,9 @@ def generate_report(commodity="gold", groq_client=None):
         vs = a.get("vader_score", 0)
         indicator = "🟢" if vs > 0.05 else "🔴" if vs < -0.05 else "🟡"
         title = escape_md2(a["title"][:60])
-        articles_text += f"\n{i}\\. {indicator} _{title}_"
+        age = a.get("age")
+        age_str = f" 🕐 {escape_md2(age)} ago" if age else ""
+        articles_text += f"\n{i}\\. {indicator} _{title}_{age_str}"
 
     if commodity == "fcpo":
         dxy_line = f"💱 *MYR:* {escape_md2(meta.get('myr_bias', 'Neutral'))}"

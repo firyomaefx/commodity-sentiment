@@ -652,15 +652,9 @@ def main():
             ks = article.get("keyword_score", 0)
             badge = f'<span style="background:rgba(255,255,255,0.06);color:#86868B;font-size:11px;padding:2px 8px;border-radius:980px;font-family:{APPLE_FONT};font-weight:600;">{ks}</span>'
             src = f'<div style="margin-top:6px;"><a href="{article["link"]}" style="font-size:12px;font-family:{APPLE_FONT};">Source</a></div>' if article.get("link") else ""
-            fetch_str = ""
-            ft = article.get("fetched_at", "")
-            try:
-                fetch_dt = datetime.fromisoformat(ft.replace("Z", "+00:00")).astimezone(MYT)
-                fetch_str = fetch_dt.strftime("%I:%M %p")
-            except Exception:
-                fetch_str = ""
-            ts_line = f'<div style="color:#636366;font-size:10px;font-family:{APPLE_FONT};margin-top:4px;">Extracted {fetch_str} MYT</div>' if fetch_str else ""
-            st.markdown(f'<div style="background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:{ic};flex-shrink:0;"></div><div style="color:#F5F5F7;font-size:14px;font-weight:500;font-family:{APPLE_FONT};flex:1;">{article["title"][:90]}</div>{badge}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};margin-bottom:4px;">{cat_str}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};">VADER <span style="color:{ic};font-weight:600;">{vader_s:.3f}</span></div>{ts_line}<div style="color:#AEAEB2;font-size:13px;line-height:1.5;margin-top:6px;font-family:{APPLE_FONT};">{article["summary"][:200]}</div>{src}</div>', unsafe_allow_html=True)
+            age = article.get("age")
+            age_html = f'<span style="color:#0A84FF;font-size:11px;font-family:{APPLE_FONT};margin-left:12px;">&#128336; {age} ago</span>' if age else ""
+            st.markdown(f'<div style="background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:{ic};flex-shrink:0;"></div><div style="color:#F5F5F7;font-size:14px;font-weight:500;font-family:{APPLE_FONT};flex:1;">{article["title"][:90]}</div>{badge}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};margin-bottom:4px;">{cat_str}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};">VADER <span style="color:{ic};font-weight:600;">{vader_s:.3f}</span>{age_html}</div><div style="color:#AEAEB2;font-size:13px;line-height:1.5;margin-top:6px;font-family:{APPLE_FONT};">{article["summary"][:200]}</div>{src}</div>', unsafe_allow_html=True)
 
 
 
