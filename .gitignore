@@ -4,3 +4,4 @@ __pycache__/
 subscribers.json
 *.egg-info/
 *.log
+_cache/

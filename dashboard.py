@@ -14,6 +14,7 @@ from collector import DataCollector
 from analyzer import SentimentAnalyzer
 from config import COMMODITY_CONFIGS, REFRESH_INTERVAL_SECONDS
 from groq_client import GroqAnalyzer
+import cache_manager
 
 st.set_page_config(
     page_title="Commodity Sentiment Dashboard",
@@ -80,27 +81,53 @@ def _prefetch_commodity(comm):
         pass
 
 
+_DISK_CACHE_LOCK = threading.Lock()
+
+
 def get_commodity_data(commodity="gold"):
-    """Return cached data for commodity, fetching in background if needed."""
+    """Return cached data for commodity. Priority: session > disk > network."""
     cache_key = "_commodity_data"
     if cache_key not in st.session_state:
         st.session_state[cache_key] = {}
 
     data_dict = st.session_state[cache_key]
 
+    # 1. Session cache (fastest)
     if commodity in data_dict and "result" in data_dict[commodity]:
         d = data_dict[commodity]
         return d["result"], d["data"], d["price_data"], d["market_data"]
 
-    # Fetch synchronously for the active commodity
+    # 2. Disk cache (survives refresh/restart)
+    disk_result, disk_data, disk_price, disk_market = cache_manager.load(
+        commodity, ttl_seconds=REFRESH_INTERVAL_SECONDS
+    )
+    if disk_result is not None:
+        data_dict[commodity] = {
+            "result": disk_result, "data": disk_data,
+            "price_data": disk_price, "market_data": disk_market,
+            "loaded_at": datetime.now(timezone.utc).isoformat(),
+            "source": "disk",
+        }
+        st.session_state[cache_key] = data_dict
+        for comm in ["gold", "wti", "fcpo"]:
+            if comm != commodity and (comm not in data_dict or "error" in data_dict.get(comm, {})):
+                threading.Thread(target=_prefetch_commodity, args=(comm,), daemon=True).start()
+        return disk_result, disk_data, disk_price, disk_market
+
+    # 3. Network fetch (slowest)
     r, d, p, m = _fetch_single(commodity)
     data_dict[commodity] = {
         "result": r, "data": d, "price_data": p, "market_data": m,
         "loaded_at": datetime.now(timezone.utc).isoformat(),
+        "source": "network",
     }
     st.session_state[cache_key] = data_dict
 
-    # Fire background threads for the OTHER two commodities
+    # Persist to disk (thread-safe)
+    with _DISK_CACHE_LOCK:
+        cache_manager.save(commodity, r, d, p, m)
+
+    # Background prefetch other commodities
     for comm in ["gold", "wti", "fcpo"]:
         if comm != commodity and (comm not in data_dict or "error" in data_dict.get(comm, {})):
             threading.Thread(target=_prefetch_commodity, args=(comm,), daemon=True).start()
@@ -113,30 +140,37 @@ def render_skeleton():
     st.markdown(f"""
     <style>
     @keyframes pulse {{
-        0% {{ opacity: 0.3; }}
-        50% {{ opacity: 0.7; }}
-        100% {{ opacity: 0.3; }}
+        0% {{ opacity: 0.25; }}
+        50% {{ opacity: 0.6; }}
+        100% {{ opacity: 0.25; }}
     }}
     .skel {{
-        background: rgba(255,255,255,0.06);
+        background: rgba(255,255,255,0.05);
         border-radius: 12px;
         animation: pulse 1.2s ease-in-out infinite;
         height: 24px;
         margin-bottom: 8px;
     }}
-    .skel-lg {{ height: 48px; border-radius: 16px; }}
-    .skel-md {{ height: 32px; border-radius: 12px; }}
-    .skel-sm {{ height: 16px; width: 60%; border-radius: 8px; }}
+    .skel-lg {{ height: 56px; border-radius: 16px; }}
+    .skel-md {{ height: 36px; border-radius: 12px; }}
+    .skel-sm {{ height: 16px; width: 50%; border-radius: 8px; }}
+    .skel-card {{ height: 100px; border-radius: 16px; }}
+    .skel-chart {{ height: 180px; border-radius: 12px; }}
     </style>
     <div style="background:#1C1C1E;border:1px solid #2C2C2E;border-radius:20px;padding:32px 40px;margin-bottom:24px;">
-        <div class="skel skel-sm" style="margin-bottom:16px;"></div>
-        <div class="skel skel-lg" style="width:40%;"></div>
+        <div class="skel skel-sm" style="margin-bottom:16px;width:30%;"></div>
+        <div class="skel skel-lg" style="width:45%;"></div>
     </div>
     <div style="display:flex;gap:16px;margin-bottom:24px;">
-        <div style="flex:1;"><div class="skel skel-md"></div></div>
-        <div style="flex:1;"><div class="skel skel-md"></div></div>
-        <div style="flex:1;"><div class="skel skel-md"></div></div>
-        <div style="flex:1;"><div class="skel skel-md"></div></div>
+        <div style="flex:1;"><div class="skel skel-card"></div></div>
+        <div style="flex:1;"><div class="skel skel-card"></div></div>
+        <div style="flex:1;"><div class="skel skel-card"></div></div>
+        <div style="flex:1;"><div class="skel skel-card"></div></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-bottom:24px;">
+        <div style="flex:1;"><div class="skel skel-chart"></div></div>
+        <div style="flex:1;"><div class="skel skel-chart"></div></div>
+        <div style="flex:1.5;"><div class="skel skel-chart"></div></div>
     </div>
     """, unsafe_allow_html=True)
 

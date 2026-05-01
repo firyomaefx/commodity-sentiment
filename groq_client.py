@@ -15,8 +15,8 @@ except ImportError as e:
 
 class GroqAnalyzer:
     MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-    MAX_ARTICLES = 20
-    BATCH_SIZE = 10
+    MAX_ARTICLES = 12
+    BATCH_SIZE = 6
 
     def __init__(self, api_key=None):
         self.available = False

@@ -296,7 +296,7 @@ class DataCollector:
             if key not in seen_titles:
                 seen_titles.add(key)
                 unique.append(a)
-        self.articles = sorted(unique, key=lambda x: x["keyword_score"], reverse=True)[:150]
+        self.articles = sorted(unique, key=lambda x: x["keyword_score"], reverse=True)[:80]
         if groq_client and groq_client.available:
             self.articles = groq_client.batch_classify_articles(self.articles, self.commodity)
         return {

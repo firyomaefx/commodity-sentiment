@@ -17,9 +17,7 @@ COMMODITY_CONFIGS = {
         },
         "rss_feeds": [
             "https://www.reuters.com/rssFeed/businessNews",
-            "https://www.reuters.com/rssFeed/worldNews",
             "https://www.forexlive.com/feed/",
-            "https://www.cnbc.com/id/100003114/device/rss/rss.html",
             "https://www.marketwatch.com/rss/topstories",
             "https://news.google.com/rss/search?q=gold+xau+usd+dxy+fed+inflation&hl=en-US&gl=US&ceid=US:en",
         ],
@@ -28,15 +26,12 @@ COMMODITY_CONFIGS = {
             "https://news.google.com/rss/search?q=DXY+US+dollar+index&hl=en-US&gl=US&ceid=US:en",
             "https://news.google.com/rss/search?q=federal+reserve+rate+cut+hike&hl=en-US&gl=US&ceid=US:en",
             "https://news.google.com/rss/search?q=geopolitical+conflict+war+2026&hl=en-US&gl=US&ceid=US:en",
-            "https://news.google.com/rss/search?q=inflation+CPI+economic+data&hl=en-US&gl=US&ceid=US:en",
         ],
         "web_queries": [
             "gold price XAU USD today",
             "DXY US dollar index today",
             "Federal Reserve rate decision latest",
             "geopolitical tensions latest",
-            "inflation CPI data latest",
-            "gold market sentiment analysis",
         ],
         "bullish_phrases": [
             "safe haven", "flight to safety", "risk off", "risk-off", "gold rises",
@@ -95,9 +90,7 @@ COMMODITY_CONFIGS = {
         },
         "rss_feeds": [
             "https://www.reuters.com/rssFeed/businessNews",
-            "https://www.reuters.com/rssFeed/worldNews",
             "https://www.forexlive.com/feed/",
-            "https://www.cnbc.com/id/100003114/device/rss/rss.html",
             "https://www.marketwatch.com/rss/topstories",
             "https://news.google.com/rss/search?q=crude+oil+WTI+OPEC+energy&hl=en-US&gl=US&ceid=US:en",
         ],
@@ -105,15 +98,12 @@ COMMODITY_CONFIGS = {
             "https://news.google.com/rss/search?q=WTI+crude+oil+price&hl=en-US&gl=US&ceid=US:en",
             "https://news.google.com/rss/search?q=OPEC+production+cut+oil&hl=en-US&gl=US&ceid=US:en",
             "https://news.google.com/rss/search?q=EIA+crude+inventories+oil&hl=en-US&gl=US&ceid=US:en",
-            "https://news.google.com/rss/search?q=oil+rig+count+shale&hl=en-US&gl=US&ceid=US:en",
-            "https://news.google.com/rss/search?q=federal+reserve+rate+cut+hike+oil&hl=en-US&gl=US&ceid=US:en",
+            "https://news.google.com/rss/search?q=geopolitical+middle+east+supply&hl=en-US&gl=US&ceid=US:en",
         ],
         "web_queries": [
             "WTI crude oil price today",
             "OPEC production decision latest",
             "EIA crude oil inventory data",
-            "oil rig count shale latest",
-            "crude oil market sentiment analysis",
             "Middle East oil supply latest",
         ],
         "bullish_phrases": [
@@ -173,7 +163,6 @@ COMMODITY_CONFIGS = {
         },
         "rss_feeds": [
             "https://www.reuters.com/rssFeed/businessNews",
-            "https://www.reuters.com/rssFeed/worldNews",
             "https://www.cnbc.com/id/100003114/device/rss/rss.html",
             "https://news.google.com/rss/search?q=palm+oil+FCPO+Bursa+Malaysia&hl=en-MY&gl=MY&ceid=MY:en",
         ],
