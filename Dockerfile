@@ -22,7 +22,7 @@ RUN rm -f /etc/nginx/sites-enabled/default && \
     ls -la /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 # Nginx: override gzip settings in conf.d (avoids duplicate directive with Debian defaults)
-RUN printf 'gzip on;\ngzip_vary on;\ngzip_min_length 256;\ngzip_proxied any;\ngzip_comp_level 5;\ngzip_types text/plain text/css text/html application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;\n' > /etc/nginx/conf.d/gzip.conf
+RUN printf 'gzip_vary on;\ngzip_min_length 256;\ngzip_proxied any;\ngzip_comp_level 5;\ngzip_types text/plain text/css text/html application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;\n' > /etc/nginx/conf.d/gzip.conf
 
 # Nginx: disable daemon (supervisor runs it as foreground)
 # Insert 'daemon off;' at the very TOP of nginx.conf (before events{} block)
