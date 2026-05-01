@@ -158,12 +158,20 @@ def generate_report(commodity="gold", groq_client=None):
         title = escape_md2(a["title"][:60])
         articles_text += f"\n{i}\\. {indicator} _{title}_"
 
-    supply_line = ""
-    if commodity in ("wti", "fcpo"):
+    if commodity == "fcpo":
+        dxy_line = f"💱 *MYR:* {escape_md2(meta.get('myr_bias', 'Neutral'))}"
         supply_score = meta.get("supply_score", 0)
         supply_label = "Tight" if supply_score > 0 else "Oversupply" if supply_score < 0 else "Balanced"
-        icon = "🛢️" if commodity == "wti" else "🌴"
-        supply_line = f"\n{icon} *Supply\\:* {escape_md2(supply_label)} \\({supply_score}\\)"
+        supply_line = f"🌴 *Supply:* {escape_md2(supply_label)} \\({supply_score}\\)"
+        contrarian_line = ""
+    else:
+        dxy_line = f"💵 *DXY:* {escape_md2(a3['dxy_directional_bias'])}"
+        supply_line = ""
+        if commodity == "wti":
+            supply_score = meta.get("supply_score", 0)
+            supply_label = "Tight" if supply_score > 0 else "Oversupply" if supply_score < 0 else "Balanced"
+            supply_line = f"\n🛢️ *Supply:* {escape_md2(supply_label)} \\({supply_score}\\)"
+        contrarian_line = f"\n{contrarian_emoji} *Contrarian:* {escape_md2(a2['contrarian_signal'])}"
 
     report = f"""*{escape_md2(cfg['display_name'])} Sentiment Report*
 📅 {escape_md2(datetime.now(MYT).strftime('%d %b %Y, %H:%M'))} MYT
@@ -174,10 +182,9 @@ def generate_report(commodity="gold", groq_client=None):
 {be} *{escape_md2(fs[bias_key])}*
 
 *━━━ METRICS ━━━*
-📊 *Sentiment\\:* {a2[score_key]} \\({escape_md2(a2['sentiment_label'])}\\)
-{mood_emoji} *Mood\\:* {escape_md2(a1['overall_market_mood'])}
-💵 *DXY\\:* {escape_md2(a3['dxy_directional_bias'])}
-{contrarian_emoji} *Contrarian\\:* {escape_md2(a2['contrarian_signal'])}{supply_line}
+📊 *Sentiment:* {a2[score_key]} \\({escape_md2(a2['sentiment_label'])}\\)
+{mood_emoji} *Mood:* {escape_md2(a1['overall_market_mood'])}
+{dxy_line}{contrarian_line}{supply_line}
 
 *━━━ MACRO ━━━*
 {escape_md2(a1['macro_event_impact'])}
@@ -193,9 +200,7 @@ def generate_report(commodity="gold", groq_client=None):
 *━━━ JUSTIFICATION ━━━*
 {escape_md2(fs['justification'])}
 
-_Data\\: VADER \\+ Rule\\-Based \\| {meta['articles_analyzed']} articles_"""
-
-    return report
+_Data: Groq AI \\+ VADER \\| {meta['articles_analyzed']} articles_"""
 
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):

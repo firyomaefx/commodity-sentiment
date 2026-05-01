@@ -192,16 +192,24 @@ class SentimentAnalyzer:
         risk_off_signals = 0
         risk_on_signals = 0
 
-        if geo_intensity in ["High", "Moderate"]:
-            risk_off_signals += 2
-        if macro_bias == "Dovish":
-            risk_off_signals += 2
-        if macro_bias == "Hawkish":
-            risk_on_signals += 2
-        if sentiment_score > 30:
-            risk_off_signals += 1
-        elif sentiment_score < -30:
-            risk_on_signals += 1
+        if self.commodity == "fcpo":
+            if sentiment_score > 30:
+                risk_on_signals += 2
+            elif sentiment_score < -30:
+                risk_off_signals += 2
+            if geo_intensity in ["High", "Moderate"]:
+                risk_off_signals += 1
+        else:
+            if geo_intensity in ["High", "Moderate"]:
+                risk_off_signals += 2
+            if macro_bias == "Dovish":
+                risk_off_signals += 2
+            if macro_bias == "Hawkish":
+                risk_on_signals += 2
+            if sentiment_score > 30:
+                risk_off_signals += 1
+            elif sentiment_score < -30:
+                risk_on_signals += 1
 
         if risk_off_signals > risk_on_signals:
             return "Risk-Off"
@@ -251,7 +259,26 @@ class SentimentAnalyzer:
                 supply_score -= 1
         return supply_score
 
-    def generate_final_bias(self, sentiment_score, dxy_bias, geo_intensity, macro_bias, contrarian_signal, supply_score=0, articles=None):
+    def _analyze_myr(self, articles):
+        if self.commodity != "fcpo":
+            return "Neutral"
+        myr_score = 0
+        for a in articles:
+            text_lower = a["text"].lower()
+            has_myr = "myr" in text_lower or "ringgit" in text_lower or "malaysian" in text_lower
+            if not has_myr:
+                continue
+            if any(p in text_lower for p in ["weak", "falls", "drops", "slides", "declines", "depreciates"]):
+                myr_score -= 1
+            if any(p in text_lower for p in ["strong", "rallies", "rises", "firms", "gains", "appreciates"]):
+                myr_score += 1
+        if myr_score < -1:
+            return "Bearish"
+        if myr_score > 1:
+            return "Bullish"
+        return "Neutral"
+
+    def generate_final_bias(self, sentiment_score, dxy_bias, geo_intensity, macro_bias, contrarian_signal, supply_score=0, myr_bias="Neutral", articles=None):
         score = 0
 
         if sentiment_score > 50:
@@ -263,29 +290,48 @@ class SentimentAnalyzer:
         elif sentiment_score < -20:
             score -= 1
 
-        if dxy_bias == "Bearish":
-            score += 2
-        elif dxy_bias == "Bullish":
-            score -= 2
+        if self.commodity == "fcpo":
+            if myr_bias == "Bearish":
+                score += 2
+            elif myr_bias == "Bullish":
+                score -= 2
+        else:
+            if dxy_bias == "Bearish":
+                score += 2
+            elif dxy_bias == "Bullish":
+                score -= 2
 
-        if geo_intensity == "High":
-            score += 2
-        elif geo_intensity == "Moderate":
-            score += 1
+        if self.commodity == "fcpo":
+            if geo_intensity == "High":
+                score += 1
+            elif geo_intensity == "Moderate":
+                score += 1
+        else:
+            if geo_intensity == "High":
+                score += 2
+            elif geo_intensity == "Moderate":
+                score += 1
 
-        if macro_bias == "Dovish":
-            score += 2
-        elif macro_bias == "Hawkish":
-            score -= 2
+        if self.commodity == "fcpo":
+            pass
+        else:
+            if macro_bias == "Dovish":
+                score += 2
+            elif macro_bias == "Hawkish":
+                score -= 2
 
         if self.commodity in ("wti", "fcpo"):
-            score += supply_score
+            if self.commodity == "fcpo":
+                score += supply_score * 2
+            else:
+                score += supply_score
 
-        if contrarian_signal == "YES":
-            if sentiment_score > 75:
-                score -= 3
-            elif sentiment_score < -75:
-                score += 3
+        if self.commodity != "fcpo":
+            if contrarian_signal == "YES":
+                if sentiment_score > 75:
+                    score -= 3
+                elif sentiment_score < -75:
+                    score += 3
 
         if score >= 4:
             bias = "Strong Buy"
@@ -303,22 +349,32 @@ class SentimentAnalyzer:
             if self.commodity == "wti":
                 drivers.append("geopolitical supply risk")
             elif self.commodity == "fcpo":
-                drivers.append("supply chain disruption")
+                drivers.append("trade disruption risk")
             else:
                 drivers.append("geopolitical fear premium")
-        if macro_bias == "Dovish":
-            drivers.append("dovish Fed expectations")
-        elif macro_bias == "Hawkish":
-            if self.commodity == "wti":
-                drivers.append("hawkish Fed demand pressure")
-            elif self.commodity == "fcpo":
-                drivers.append("hawkish Fed pressure on EM demand")
-            else:
-                drivers.append("hawkish Fed pressure")
-        if dxy_bias == "Bearish":
-            drivers.append("weak dollar support")
-        elif dxy_bias == "Bullish":
-            drivers.append("strong dollar headwind")
+        if self.commodity != "fcpo":
+            if macro_bias == "Dovish":
+                drivers.append("dovish Fed expectations")
+            elif macro_bias == "Hawkish":
+                if self.commodity == "wti":
+                    drivers.append("hawkish Fed demand pressure")
+                else:
+                    drivers.append("hawkish Fed pressure")
+        else:
+            if macro_bias == "Dovish":
+                drivers.append("easier global financial conditions")
+            elif macro_bias == "Hawkish":
+                drivers.append("tighter global financial conditions")
+        if self.commodity == "fcpo":
+            if myr_bias == "Bearish":
+                drivers.append("weak Ringgit support")
+            elif myr_bias == "Bullish":
+                drivers.append("strong Ringgit headwind")
+        else:
+            if dxy_bias == "Bearish":
+                drivers.append("weak dollar support")
+            elif dxy_bias == "Bullish":
+                drivers.append("strong dollar headwind")
         if self.commodity == "wti" and supply_score > 0:
             drivers.append("supply tightness")
         elif self.commodity == "wti" and supply_score < 0:
@@ -327,7 +383,7 @@ class SentimentAnalyzer:
             drivers.append("palm oil supply tightness")
         elif self.commodity == "fcpo" and supply_score < 0:
             drivers.append("palm oil oversupply")
-        if contrarian_signal == "YES":
+        if self.commodity != "fcpo" and contrarian_signal == "YES":
             drivers.append("contrarian reversal risk")
 
         if self.groq and self.groq.available:
@@ -351,9 +407,10 @@ class SentimentAnalyzer:
         contrarian = self.compute_contrarian_signal(sentiment_score)
         market_mood = self.determine_market_mood(geo_intensity, macro_bias, sentiment_score)
         dxy_bias = self.analyze_dxy(articles)
+        myr_bias = self._analyze_myr(articles)
         supply_score = self._analyze_supply(articles)
         final_bias, justification = self.generate_final_bias(
-            sentiment_score, dxy_bias, geo_intensity, macro_bias, contrarian, supply_score, articles
+            sentiment_score, dxy_bias, geo_intensity, macro_bias, contrarian, supply_score, myr_bias, articles
         )
 
         for a in articles:
@@ -384,6 +441,7 @@ class SentimentAnalyzer:
                 "macro_bias": macro_bias,
                 "market_mood": market_mood,
                 "supply_score": supply_score,
+                "myr_bias": myr_bias,
                 "commodity": self.commodity,
             }
         }

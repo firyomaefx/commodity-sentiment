@@ -416,9 +416,15 @@ def main():
     with col2:
         st.markdown(metric_card("Market Mood", a1["overall_market_mood"]), unsafe_allow_html=True)
     with col3:
-        dxy_delta = "↑ Dollar" if a3["dxy_directional_bias"] == "Bullish" else "↓ Dollar" if a3["dxy_directional_bias"] == "Bearish" else "—"
-        dxy_dc = "#FF453A" if a3["dxy_directional_bias"] == "Bullish" else "#30D158" if a3["dxy_directional_bias"] == "Bearish" else "#86868B"
-        st.markdown(metric_card("DXY Bias", a3["dxy_directional_bias"], dxy_delta, dxy_dc), unsafe_allow_html=True)
+        if commodity == "fcpo":
+            myr_bias = meta.get("myr_bias", "Neutral")
+            myr_delta = "↓ Ringgit" if myr_bias == "Bearish" else "↑ Ringgit" if myr_bias == "Bullish" else "—"
+            myr_dc = "#30D158" if myr_bias == "Bearish" else "#FF453A" if myr_bias == "Bullish" else "#8E8E93"
+            st.markdown(metric_card("MYR (Ringgit)", myr_bias, myr_delta, myr_dc), unsafe_allow_html=True)
+        else:
+            dxy_delta = "↑ Dollar" if a3["dxy_directional_bias"] == "Bullish" else "↓ Dollar" if a3["dxy_directional_bias"] == "Bearish" else "—"
+            dxy_dc = "#FF453A" if a3["dxy_directional_bias"] == "Bullish" else "#30D158" if a3["dxy_directional_bias"] == "Bearish" else "#86868B"
+            st.markdown(metric_card("DXY Bias", a3["dxy_directional_bias"], dxy_delta, dxy_dc), unsafe_allow_html=True)
     with col4:
         if commodity in ("wti", "fcpo"):
             supply_score = meta.get("supply_score", 0)
@@ -451,7 +457,10 @@ def main():
 
     col_macro, col_geo = st.columns(2)
     with col_macro:
-        st.markdown(f'<div><div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:16px;">Macro & Fed</div><div style="color:#F5F5F7;font-size:14px;line-height:1.6;font-family:{APPLE_FONT};">{a1["macro_event_impact"]}</div><div style="margin-top:12px;color:#86868B;font-size:12px;font-family:{APPLE_FONT};">Bias: <span style="color:#0A84FF;font-weight:600;">{meta["macro_bias"]}</span></div></div>', unsafe_allow_html=True)
+        if commodity == "fcpo":
+            st.markdown(f'<div><div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:16px;">Supply & Policy</div><div style="color:#F5F5F7;font-size:14px;line-height:1.6;font-family:{APPLE_FONT};">{a1["macro_event_impact"]}</div><div style="margin-top:12px;color:#86868B;font-size:12px;font-family:{APPLE_FONT};">Supply: <span style="color:#30D158;font-weight:600;">{meta.get("supply_score",0):+d}</span></div></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div><div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:16px;">Macro & Fed</div><div style="color:#F5F5F7;font-size:14px;line-height:1.6;font-family:{APPLE_FONT};">{a1["macro_event_impact"]}</div><div style="margin-top:12px;color:#86868B;font-size:12px;font-family:{APPLE_FONT};">Bias: <span style="color:#0A84FF;font-weight:600;">{meta["macro_bias"]}</span></div></div>', unsafe_allow_html=True)
     with col_geo:
         st.markdown(f'<div><div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:16px;">Geopolitical</div><div style="color:#F5F5F7;font-size:14px;line-height:1.6;font-family:{APPLE_FONT};">{a1["geopolitical_summary"]}</div><div style="margin-top:12px;color:#86868B;font-size:12px;font-family:{APPLE_FONT};">Intensity: <span style="color:#FF9F0A;font-weight:600;">{meta["geo_intensity"]}</span></div></div>', unsafe_allow_html=True)
 

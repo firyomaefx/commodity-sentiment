@@ -163,12 +163,12 @@ COMMODITY_CONFIGS = {
         "currency": "RM",
         "keywords": {
             "fcpo": ["FCPO", "CPO", "crude palm oil", "palm oil futures", "bursa derivatives", "palm oil price"],
-            "supply": ["MPOB", "stock", "inventory", "production", "FFB", "OER", "output", "yield", "crop"],
-            "demand": ["export", "India import", "China import", "biodiesel", "B20", "B40", "POGO", "blending"],
-            "weather": ["El Niño", "La Niña", "drought", "monsoon", "rainfall", "flood", "dry spell"],
+            "supply": ["MPOB", "stock", "inventory", "production", "FFB", "OER", "output", "yield", "crop", "supply"],
+            "demand": ["export", "India import", "China import", "biodiesel", "B20", "B40", "POGO", "blending", "import demand"],
+            "weather": ["El Niño", "La Niña", "drought", "monsoon", "rainfall", "flood", "dry spell", "weather"],
             "policy": ["DMO", "export levy", "export ban", "EUDR", "RSPO", "MSPO", "tariff", "quota"],
             "competing": ["soybean oil", "CBOT", "rapeseed", "sunflower oil", "differential", "spread"],
-            "myr": ["MYR", "Ringgit", "Malaysian ringgit", "forex"],
+            "myr": ["MYR", "Ringgit", "Malaysian ringgit", "forex", "currency"],
             "geopolitical": ["Geopolitical", "War", "Conflict", "Tension", "Sanctions", "Russia", "Ukraine", "tariff", "trade war"],
         },
         "rss_feeds": [
