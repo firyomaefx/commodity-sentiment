@@ -3,6 +3,8 @@ import json
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timezone, timedelta
+import threading
+import time
 import pandas as pd
 import sys
 import os
@@ -47,7 +49,8 @@ groq_client = GroqAnalyzer()
 
 
 @st.cache_data(ttl=REFRESH_INTERVAL_SECONDS, show_spinner=False)
-def fetch_and_analyze(commodity="gold"):
+def _fetch_single(commodity="gold"):
+    """Low-level fetch for one commodity. Cached + parallelized."""
     cfg = COMMODITY_CONFIGS.get(commodity, COMMODITY_CONFIGS["gold"])
     collector = DataCollector(commodity=commodity)
     analyzer = SentimentAnalyzer(commodity=commodity, groq_client=groq_client)
@@ -63,6 +66,79 @@ def fetch_and_analyze(commodity="gold"):
         "price_label": cfg["price_label"],
     }
     return result, data, price_data, market_data
+
+
+def _prefetch_commodity(comm):
+    """Background thread: fetch one commodity into session cache."""
+    try:
+        r, d, p, m = _fetch_single(comm)
+        st.session_state["_commodity_data"][comm] = {
+            "result": r, "data": d, "price_data": p, "market_data": m,
+            "loaded_at": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception:
+        pass
+
+
+def get_commodity_data(commodity="gold"):
+    """Return cached data for commodity, fetching in background if needed."""
+    cache_key = "_commodity_data"
+    if cache_key not in st.session_state:
+        st.session_state[cache_key] = {}
+
+    data_dict = st.session_state[cache_key]
+
+    if commodity in data_dict and "result" in data_dict[commodity]:
+        d = data_dict[commodity]
+        return d["result"], d["data"], d["price_data"], d["market_data"]
+
+    # Fetch synchronously for the active commodity
+    r, d, p, m = _fetch_single(commodity)
+    data_dict[commodity] = {
+        "result": r, "data": d, "price_data": p, "market_data": m,
+        "loaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    st.session_state[cache_key] = data_dict
+
+    # Fire background threads for the OTHER two commodities
+    for comm in ["gold", "wti", "fcpo"]:
+        if comm != commodity and (comm not in data_dict or "error" in data_dict.get(comm, {})):
+            threading.Thread(target=_prefetch_commodity, args=(comm,), daemon=True).start()
+
+    return r, d, p, m
+
+
+def render_skeleton():
+    """CSS shimmer loading animation while data loads."""
+    st.markdown(f"""
+    <style>
+    @keyframes pulse {{
+        0% {{ opacity: 0.3; }}
+        50% {{ opacity: 0.7; }}
+        100% {{ opacity: 0.3; }}
+    }}
+    .skel {{
+        background: rgba(255,255,255,0.06);
+        border-radius: 12px;
+        animation: pulse 1.2s ease-in-out infinite;
+        height: 24px;
+        margin-bottom: 8px;
+    }}
+    .skel-lg {{ height: 48px; border-radius: 16px; }}
+    .skel-md {{ height: 32px; border-radius: 12px; }}
+    .skel-sm {{ height: 16px; width: 60%; border-radius: 8px; }}
+    </style>
+    <div style="background:#1C1C1E;border:1px solid #2C2C2E;border-radius:20px;padding:32px 40px;margin-bottom:24px;">
+        <div class="skel skel-sm" style="margin-bottom:16px;"></div>
+        <div class="skel skel-lg" style="width:40%;"></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-bottom:24px;">
+        <div style="flex:1;"><div class="skel skel-md"></div></div>
+        <div style="flex:1;"><div class="skel skel-md"></div></div>
+        <div style="flex:1;"><div class="skel skel-md"></div></div>
+        <div style="flex:1;"><div class="skel skel-md"></div></div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_gauge(score, title, min_val=-100, max_val=100):
@@ -336,7 +412,7 @@ def main():
 <div style="display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
 <div>
 <div style="color:#8E8E93;font-size:14px;font-family:{APPLE_FONT};">{datetime.now(MYT).strftime("%I:%M %p")} MYT</div>
-<div style="color:#6E6E73;font-size:11px;font-family:{APPLE_FONT};margin-top:2px;">Auto-refresh {REFRESH_INTERVAL_SECONDS}s</div>
+<div style="color:#6E6E73;font-size:11px;font-family:{APPLE_FONT};margin-top:2px;">Auto-refresh 5 min</div>
 </div>
 <a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #0A84FF;border-radius:999px;padding:8px 18px;color:#0A84FF;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:8px;"><span style="font-size:14px;">✈️</span> Get Via Telegram</a>
 <a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #000000;border-radius:999px;padding:8px 18px;color:#000000;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;"><span style="font-size:14px;">☕</span> Support Us</a>
@@ -362,7 +438,16 @@ def main():
         st.cache_data.clear()
         st.rerun()
 
-    result, data, price_data, market_data = fetch_and_analyze(commodity)
+    # Show skeleton while data loads for first time
+    cache_key = "_commodity_data"
+    if cache_key not in st.session_state:
+        st.session_state[cache_key] = {}
+
+    has_cached = commodity in st.session_state[cache_key] and "result" in st.session_state[cache_key][commodity]
+    if not has_cached:
+        render_skeleton()
+
+    result, data, price_data, market_data = get_commodity_data(commodity)
 
     a1 = result["analysis_1_macro"]
     a2 = result["analysis_2_sentiment"]
