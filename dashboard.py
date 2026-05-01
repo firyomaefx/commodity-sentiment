@@ -15,6 +15,7 @@ from analyzer import SentimentAnalyzer
 from config import COMMODITY_CONFIGS, REFRESH_INTERVAL_SECONDS
 from groq_client import GroqAnalyzer
 import cache_manager
+import build_landing
 
 st.set_page_config(
     page_title="Commodity Sentiment Dashboard",
@@ -47,6 +48,11 @@ if os.path.exists(ENV_FILE):
                 os.environ.setdefault(key.strip(), val.strip())
 
 groq_client = GroqAnalyzer()
+
+# Start background landing.html generator (runs once on server start)
+if "_landing_started" not in st.session_state:
+    st.session_state["_landing_started"] = True
+    build_landing.run_background(interval_sec=REFRESH_INTERVAL_SECONDS)
 
 
 @st.cache_data(ttl=REFRESH_INTERVAL_SECONDS, show_spinner=False)

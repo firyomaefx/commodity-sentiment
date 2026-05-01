@@ -2,16 +2,30 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# Install nginx, supervisor, curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nginx supervisor curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /var/log/supervisor /var/run /run && \
+    ln -sf /dev/stdout /var/log/nginx/access.log && \
+    ln -sf /dev/stderr /var/log/nginx/error.log
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 7860
+# Nginx config
+COPY nginx.conf /etc/nginx/sites-enabled/default
+RUN rm -f /etc/nginx/sites-enabled/default 2>/dev/null; \
+    cp /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default 2>/dev/null || true; \
+    echo "daemon off;" >> /etc/nginx/nginx.conf
 
-HEALTHCHECK CMD curl --fail http://localhost:7860/_stcore/health || exit 1
+# Build initial landing.html immediately
+RUN python /app/build_landing.py || true
 
-# Dashboard only — Telegram bot runs locally (HF Spaces blocks Telegram API)
-CMD ["streamlit", "run", "dashboard.py", "--server.port=7860", "--server.address=0.0.0.0"]
+EXPOSE 80
+
+HEALTHCHECK CMD curl --fail http://localhost/health || exit 1
+
+CMD ["supervisord", "-c", "/app/supervisord.conf"]
