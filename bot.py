@@ -120,6 +120,7 @@ def generate_report(commodity="gold", groq_client=None):
     collector = DataCollector(commodity=commodity)
     analyzer = SentimentAnalyzer(commodity=commodity, groq_client=groq_client)
     price_data = collector.fetch_price()
+    market_data = collector.fcpo_market_data() if commodity == "fcpo" else None
     data = collector.collect_all(groq_client=groq_client)
     result = analyzer.run_full_analysis(data["articles"])
 
@@ -139,6 +140,27 @@ def generate_report(commodity="gold", groq_client=None):
             sign = "+" if chg >= 0 else ""
             arrow = "🟢" if chg >= 0 else "🔴"
             price_line += f"  {arrow} {sign}{escape_md2(f'{chg:.2f}')} \\({sign}{escape_md2(f'{pct:.2f}')}%\\)"
+
+    market_data_lines = ""
+    if commodity == "fcpo" and market_data:
+        md = market_data
+        vol_str = md.get("volume_display") or "—"
+        vol_line = f"📊 *Volume:* {escape_md2(str(vol_str))} lots"
+        ohlc_parts = []
+        if md.get("open"):
+            open_fmt = f'{md["open"]:,.2f}'
+            ohlc_parts.append(f"Open: {currency}{escape_md2(open_fmt)}")
+        if md.get("high"):
+            high_fmt = f'{md["high"]:,.2f}'
+            ohlc_parts.append(f"High: {currency}{escape_md2(high_fmt)}")
+        if md.get("low"):
+            low_fmt = f'{md["low"]:,.2f}'
+            ohlc_parts.append(f"Low: {currency}{escape_md2(low_fmt)}")
+        if md.get("prev_close"):
+            close_fmt = f'{md["prev_close"]:,.2f}'
+            ohlc_parts.append(f"Close: {currency}{escape_md2(close_fmt)}")
+        if ohlc_parts:
+            market_data_lines = f"\n\n*━━━ MARKET DATA ━━━*\n{vol_line}\n📈 {' | '.join(ohlc_parts)}"
 
     bias_emoji = {"Strong Buy": "🟢🟢", "Buy": "🟢", "Neutral": "🟡", "Sell": "🔴", "Strong Sell": "🔴🔴"}
     bias_key = f"final_{sk}_bias"
@@ -162,7 +184,7 @@ def generate_report(commodity="gold", groq_client=None):
         dxy_line = f"💱 *MYR:* {escape_md2(meta.get('myr_bias', 'Neutral'))}"
         supply_score = meta.get("supply_score", 0)
         supply_label = "Tight" if supply_score > 0 else "Oversupply" if supply_score < 0 else "Balanced"
-        supply_line = f"🌴 *Supply:* {escape_md2(supply_label)} \\({supply_score}\\)"
+        supply_line = f"\n🌴 *Supply:* {escape_md2(supply_label)} \\({supply_score}\\)"
         contrarian_line = ""
     else:
         dxy_line = f"💵 *DXY:* {escape_md2(a3['dxy_directional_bias'])}"
@@ -176,7 +198,7 @@ def generate_report(commodity="gold", groq_client=None):
     report = f"""*{escape_md2(cfg['display_name'])} Sentiment Report*
 📅 {escape_md2(datetime.now(MYT).strftime('%d %b %Y, %H:%M'))} MYT
 
-{price_line}
+{price_line}{market_data_lines}
 
 *━━━ SIGNAL ━━━*
 {be} *{escape_md2(fs[bias_key])}*
@@ -201,6 +223,8 @@ def generate_report(commodity="gold", groq_client=None):
 {escape_md2(fs['justification'])}
 
 _Data: Groq AI \\+ VADER \\| {meta['articles_analyzed']} articles_"""
+
+    return report
 
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):

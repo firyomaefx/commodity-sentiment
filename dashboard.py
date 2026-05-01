@@ -52,6 +52,7 @@ def fetch_and_analyze(commodity="gold"):
     collector = DataCollector(commodity=commodity)
     analyzer = SentimentAnalyzer(commodity=commodity, groq_client=groq_client)
     price_data = collector.fetch_price()
+    market_data = collector.fcpo_market_data() if commodity == "fcpo" else None
     data = collector.collect_all(groq_client=groq_client)
     result = analyzer.run_full_analysis(data["articles"])
     result["collection_meta"] = {
@@ -61,7 +62,7 @@ def fetch_and_analyze(commodity="gold"):
         "timestamp": data["timestamp"],
         "price_label": cfg["price_label"],
     }
-    return result, data, price_data
+    return result, data, price_data, market_data
 
 
 def render_gauge(score, title, min_val=-100, max_val=100):
@@ -361,7 +362,7 @@ def main():
         st.cache_data.clear()
         st.rerun()
 
-    result, data, price_data = fetch_and_analyze(commodity)
+    result, data, price_data, market_data = fetch_and_analyze(commodity)
 
     a1 = result["analysis_1_macro"]
     a2 = result["analysis_2_sentiment"]
@@ -435,6 +436,47 @@ def main():
             ca_delta = "Over-leveraged" if a2["contrarian_signal"] == "YES" else "Normal range"
             ca_dc = "#FF9F0A" if a2["contrarian_signal"] == "YES" else "#30D158"
             st.markdown(metric_card("Contrarian Alert", a2["contrarian_signal"], ca_delta, ca_dc), unsafe_allow_html=True)
+
+    if commodity == "fcpo" and market_data:
+        md = market_data
+        currency = cfg.get("currency", "RM")
+
+        vol_display = md.get("volume_display") or "—"
+        vol_raw = md.get("volume")
+        vol_delta = f"{int(vol_raw):,} lots" if isinstance(vol_raw, (int, float)) and vol_raw else ""
+
+        open_str = f"{currency}{md['open']:,.2f}" if md.get("open") else "—"
+        high_str = f"{currency}{md['high']:,.2f}" if md.get("high") else "—"
+        low_str = f"{currency}{md['low']:,.2f}" if md.get("low") else "—"
+        prev_str = f"{currency}{md['prev_close']:,.2f}" if md.get("prev_close") else "—"
+        day_range_str = md.get("day_range") or "—"
+        week_range_str = md.get("week_range_52") or "—"
+        settlement = md.get("settlement_type") or "Physical"
+        contract = md.get("contract_size") or "25 MT"
+        point_val = md.get("point_value") or ""
+
+        st.markdown(f'''<div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:12px;margin-top:4px;">Market Data — Last Session</div>''', unsafe_allow_html=True)
+
+        mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+        with mc1:
+            st.markdown(metric_card("Volume", vol_display, vol_delta, "#0A84FF"), unsafe_allow_html=True)
+        with mc2:
+            st.markdown(metric_card("Open", open_str, None), unsafe_allow_html=True)
+        with mc3:
+            st.markdown(metric_card("High", high_str, None, "#30D158"), unsafe_allow_html=True)
+        with mc4:
+            st.markdown(metric_card("Low", low_str, None, "#FF453A"), unsafe_allow_html=True)
+        with mc5:
+            st.markdown(metric_card("Prev Close", prev_str, None), unsafe_allow_html=True)
+
+        contract_info = f"Settlement: {settlement} | Contract: {contract}"
+        if point_val:
+            contract_info += f" | Point: {point_val}"
+        st.markdown(f'''<div style="display:flex;justify-content:space-between;color:#6E6E73;font-size:11px;font-family:{APPLE_FONT};margin-top:2px;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
+<span>Day Range: {day_range_str}</span>
+<span>52W Range: {week_range_str}</span>
+<span>{contract_info}</span>
+</div>''', unsafe_allow_html=True)
 
     st.markdown("<div style='border-top: 1px solid rgba(255,255,255,0.06); margin: 28px 0;'></div>", unsafe_allow_html=True)
 

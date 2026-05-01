@@ -4,6 +4,12 @@ from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 from config import COMMODITY_CONFIGS
 
+try:
+    import cloudscraper
+    _HAS_CLOUDSCRAPER = True
+except ImportError:
+    _HAS_CLOUDSCRAPER = False
+
 
 class DataCollector:
     def __init__(self, commodity="gold"):
@@ -43,7 +49,23 @@ class DataCollector:
                 if price and prev:
                     change = price - prev
                     change_pct = (change / prev) * 100
-                    return {"price": round(price, 2), "change": round(change, 2), "change_pct": round(change_pct, 2), "source": "yahoo", "currency": currency}
+                    volume = meta.get("regularMarketVolume")
+                    open_ = meta.get("regularMarketOpen")
+                    high = meta.get("regularMarketDayHigh")
+                    low = meta.get("regularMarketDayLow")
+                    result = {"price": round(price, 2), "change": round(change, 2), "change_pct": round(change_pct, 2), "source": "yahoo", "currency": currency}
+                    if open_:
+                        result["open"] = round(open_, 2)
+                    if high:
+                        result["high"] = round(high, 2)
+                    if low:
+                        result["low"] = round(low, 2)
+                    if prev:
+                        result["prev_close"] = round(prev, 2)
+                    if volume is not None:
+                        result["volume"] = volume
+                        result["volume_display"] = f"{volume:,}" if isinstance(volume, int) else str(volume)
+                    return result
         except Exception:
             pass
 
@@ -51,9 +73,121 @@ class DataCollector:
             return self._fetch_fcpo_price()
         return None
 
-    def _fetch_fcpo_price(self):
+    def _fetch_fcpo_market_data(self):
         try:
-            resp = self.session.get("https://www.investing.com/commodities/palm-oil", timeout=15)
+            if _HAS_CLOUDSCRAPER:
+                scraper = cloudscraper.create_scraper()
+                resp = scraper.get("https://www.investing.com/commodities/palm-oil", timeout=20)
+            else:
+                resp = self.session.get("https://www.investing.com/commodities/palm-oil", timeout=15)
+            if resp.status_code != 200:
+                return None
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            def _val(test_id):
+                el = soup.select_one(f'[data-test="{test_id}"]')
+                if not el:
+                    return None
+                txt = el.text.strip().replace(",", "").replace("%", "").strip()
+                try:
+                    return float(txt)
+                except ValueError:
+                    return txt if txt else None
+
+            price = _val("instrument-price-last")
+            if price is None:
+                return None
+            if isinstance(price, float):
+                price = round(price, 2)
+
+            prev = _val("prevClose")
+            open_ = _val("open")
+            daily_range = _val("dailyRange")
+            weekly_range = _val("weekRange")
+            volume = _val("volume")
+            settlement_type = _val("settlement_type")
+            contract_size = _val("contract_size")
+            point_value = _val("point_value")
+            tick_size = _val("tick_size")
+            tick_value = _val("tick_value")
+
+            def _safe_float(v, default=None):
+                if v is None:
+                    return default
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    return default
+
+            prev_f = _safe_float(prev, price)
+            change = round(_safe_float(price, 0) - prev_f, 2) if isinstance(price, (int, float)) else 0
+            change_pct = round((change / prev_f) * 100, 2) if prev_f else 0
+
+            high = None
+            low = None
+            if daily_range and isinstance(daily_range, str) and "-" in daily_range:
+                parts = daily_range.split("-")
+                try:
+                    low = float(parts[0].strip().replace(",", ""))
+                    high = float(parts[1].strip().replace(",", ""))
+                except (ValueError, IndexError):
+                    pass
+
+            volume_display = volume
+            if isinstance(volume, (int, float)):
+                volume_display = f"{int(volume):,}"
+            elif isinstance(volume, str):
+                volume_display = volume
+            else:
+                volume_display = None
+
+            return {
+                "price": _safe_float(price, 0),
+                "open": _safe_float(open_),
+                "high": high,
+                "low": low,
+                "prev_close": prev_f,
+                "change": change,
+                "change_pct": change_pct,
+                "volume": _safe_float(volume),
+                "volume_display": volume_display,
+                "day_range": str(daily_range) if daily_range else None,
+                "week_range_52": str(weekly_range) if weekly_range else None,
+                "settlement_type": str(settlement_type) if settlement_type else None,
+                "contract_size": str(contract_size) if contract_size else None,
+                "point_value": str(point_value) if point_value else None,
+                "tick_size": str(tick_size) if tick_size else None,
+                "source": "investing.com",
+                "currency": "RM",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        except Exception:
+            return None
+
+    def _fetch_fcpo_price(self):
+        result = self._fetch_fcpo_market_data()
+        if result and result.get("price"):
+            return {
+                "price": result["price"],
+                "change": result.get("change"),
+                "change_pct": result.get("change_pct"),
+                "source": result.get("source", "investing.com"),
+                "currency": result.get("currency", "RM"),
+                "open": result.get("open"),
+                "high": result.get("high"),
+                "low": result.get("low"),
+                "prev_close": result.get("prev_close"),
+                "volume": result.get("volume"),
+                "volume_display": result.get("volume_display"),
+                "day_range": result.get("day_range"),
+                "week_range_52": result.get("week_range_52"),
+            }
+        try:
+            if _HAS_CLOUDSCRAPER:
+                scraper = cloudscraper.create_scraper()
+                resp = scraper.get("https://www.investing.com/commodities/palm-oil", timeout=20)
+            else:
+                resp = self.session.get("https://www.investing.com/commodities/palm-oil", timeout=15)
             if resp.status_code != 200:
                 return None
             soup = BeautifulSoup(resp.text, "html.parser")
@@ -74,6 +208,11 @@ class DataCollector:
             return {"price": round(price, 2), "change": round(change, 2), "change_pct": round(change_pct, 2), "source": "investing.com", "currency": "RM"}
         except Exception:
             return None
+
+    def fcpo_market_data(self):
+        if self.commodity != "fcpo":
+            return None
+        return self._fetch_fcpo_market_data()
 
     def fetch_rss(self, feed_urls=None):
         if feed_urls is None:

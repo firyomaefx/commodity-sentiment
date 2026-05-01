@@ -9,3 +9,4 @@ streamlit-autorefresh>=1.0
 python-telegram-bot>=21.0
 apscheduler>=3.10
 groq>=0.20
+cloudscraper>=1.2
