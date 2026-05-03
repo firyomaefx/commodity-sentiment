@@ -2,12 +2,19 @@
 
 Real-time sentiment analysis for **Gold (XAU/USD)**, **WTI Crude Oil**, and **FCPO Crude Palm Oil**.
 
+## Live URLs
+
+| Service | URL |
+|---------|-----|
+| Dashboard | https://commodity-sentiment.streamlit.app |
+| Bot Health | https://commodity-sentiment-bot.onrender.com/health |
+
 ## Architecture
 
 | Component | Host | URL |
 |-----------|------|-----|
-| Interactive Dashboard | **Streamlit Cloud** | `commodity-sentiment.streamlit.app` |
-| Telegram Bot | **Render.com** | (no public URL) |
+| Dashboard | **Streamlit Cloud** | `https://commodity-sentiment.streamlit.app` |
+| Telegram Bot (Health) | **Render.com** | `https://commodity-sentiment-bot.onrender.com/health` |
 | Source Code | **GitHub** | `github.com/firyomaefx/commodity-sentiment` |
 
 ## How It Works
