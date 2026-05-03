@@ -52,6 +52,14 @@ SENANGPAY_URL = os.environ.get("SENANGPAY_URL", "https://app.senangpay.my/paymen
 JSONBIN_API_KEY = os.environ.get("JSONBIN_API_KEY", "")
 JSONBIN_BIN_ID = os.environ.get("JSONBIN_BIN_ID", "")
 
+# Global status for external health checks
+_BOT_STATUS = {
+    "initialized": False,
+    "polling": False,
+    "last_error": None,
+    "last_success": None,
+}
+
 
 class SubscriberStore:
     def __init__(self):
@@ -377,13 +385,23 @@ async def daily_report_job(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_bot():
+    global _BOT_STATUS
     if not BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN not set! Set it in .env or as environment variable.")
+        _BOT_STATUS["last_error"] = "TELEGRAM_BOT_TOKEN not set"
         return
 
+    _BOT_STATUS["initialized"] = False
+    _BOT_STATUS["polling"] = False
     store.load()
 
-    app = Application.builder().token(BOT_TOKEN).connect_timeout(60).read_timeout(60).write_timeout(60).build()
+    try:
+        app = Application.builder().token(BOT_TOKEN).connect_timeout(60).read_timeout(60).write_timeout(60).build()
+    except Exception as e:
+        _BOT_STATUS["last_error"] = f"Builder failed: {e}"
+        logger.error(f"Application builder failed: {e}")
+        return
+
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("stop", stop_cmd))
     app.add_handler(CommandHandler("report", report_cmd))
@@ -407,24 +425,36 @@ async def start_bot():
         try:
             logger.info(f"Bot connecting to Telegram (attempt {attempt+1}/5)...")
             await app.initialize()
+            _BOT_STATUS["initialized"] = True
+            _BOT_STATUS["last_success"] = "initialized"
             logger.info("Bot connected successfully")
             connected = True
             break
         except Exception as e:
-            logger.error(f"Bot init attempt {attempt+1}/5 failed: {e}")
+            err_msg = f"init attempt {attempt+1}/5 failed: {e}"
+            logger.error(err_msg)
+            _BOT_STATUS["last_error"] = err_msg
             if attempt < 4:
                 delay = (attempt + 1) * 15
                 logger.info(f"Retrying in {delay}s...")
                 await asyncio.sleep(delay)
             else:
+                _BOT_STATUS["last_error"] = "Bot failed after 5 attempts"
                 logger.error("Bot failed to start after 5 attempts — Telegram API unreachable from this network")
 
     if not connected:
         return
 
     await app.start()
-    await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-    logger.info("Bot polling started")
+    try:
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        _BOT_STATUS["polling"] = True
+        _BOT_STATUS["last_success"] = "polling started"
+        logger.info("Bot polling started")
+    except Exception as e:
+        _BOT_STATUS["last_error"] = f"Polling start failed: {e}"
+        logger.error(f"Polling start failed: {e}")
+        return
 
     try:
         while True:
@@ -432,6 +462,7 @@ async def start_bot():
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
+        _BOT_STATUS["polling"] = False
         await app.updater.stop()
         await app.stop()
         await app.shutdown()

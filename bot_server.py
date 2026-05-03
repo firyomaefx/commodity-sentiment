@@ -22,7 +22,7 @@ if os.path.exists(ENV_FILE):
                 os.environ.setdefault(key.strip(), val.strip())
 
 from fastapi import FastAPI
-from bot import start_bot
+from bot import start_bot, _BOT_STATUS
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger("bot_server")
@@ -68,6 +68,23 @@ async def health():
         "status": "ok",
         "service": "commodity-sentiment-bot",
         "bot_thread_alive": alive,
+        **_BOT_STATUS,
+    }
+
+
+@app.get("/debug")
+async def debug():
+    """Return live bot internal status."""
+    alive = _bot_task_thread is not None and _bot_task_thread.is_alive()
+    return {
+        "status": "ok",
+        "bot_thread_alive": alive,
+        "bot_status": _BOT_STATUS,
+        "env_check": {
+            "token_set": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
+            "groq_set": bool(os.environ.get("GROQ_API_KEY")),
+            "firecrawl_set": bool(os.environ.get("FIRECRAWL_API_KEY")),
+        },
     }
 
 
@@ -76,4 +93,5 @@ async def root():
     return {
         "message": "Commodity Sentiment Telegram Bot",
         "health": "/health",
+        "debug": "/debug",
     }
