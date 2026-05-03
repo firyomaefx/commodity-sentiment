@@ -8,7 +8,7 @@ Real-time sentiment analysis for **Gold (XAU/USD)**, **WTI Crude Oil**, and **FC
 |-----------|------|-----|
 | Interactive Dashboard | **Streamlit Cloud** | `commodity-sentiment.streamlit.app` |
 | Telegram Bot | **Render.com** | (no public URL) |
-| Source Code | **GitHub** | `github.com/username/commodity-sentiment` |
+| Source Code | **GitHub** | `github.com/firyomaefx/commodity-sentiment` |
 
 ## How It Works
 
@@ -39,7 +39,7 @@ Real-time sentiment analysis for **Gold (XAU/USD)**, **WTI Crude Oil**, and **FC
 1. Create new **Web Service** from GitHub
 2. Start command: `uvicorn bot_server:app --host 0.0.0.0 --port $PORT`
 3. Build command: `pip install -r requirements-bot.txt`
-4. Set env vars: `TELEGRAM_BOT_TOKEN`, `GROQ_API_KEY`, `TELEGRAM_BOT_USERNAME`
+4. Set env vars: `TELEGRAM_BOT_TOKEN`, `GROQ_API_KEY`, `TELEGRAM_BOT_USERNAME=SentimentIntelligence26Bot`, `SENANGPAY_URL=https://app.senangpay.my/payment/177739832230`
 
 ## Prepared by
 [@PedotTTRG](https://t.me/PedotTTRG)

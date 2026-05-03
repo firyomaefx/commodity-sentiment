@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: commodity-sentiment-bot
+    runtime: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements-bot.txt
+    startCommand: uvicorn bot_server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        value: SentimentIntelligence26Bot
+      - key: SENANGPAY_URL
+        value: https://app.senangpay.my/payment/177739832230
+      - key: PYTHON_VERSION
+        value: "3.12"
+    healthCheckPath: /health
