@@ -391,7 +391,7 @@ def run_health_server(port=8502):
     server.serve_forever()
 
 
-async def main():
+async def start_bot():
     if not BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN not set! Set it in .env or as environment variable.")
         return
@@ -457,4 +457,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(start_bot())
