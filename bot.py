@@ -6,7 +6,6 @@ import logging
 import asyncio
 import requests
 from datetime import datetime, timezone, timedelta
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -375,32 +374,12 @@ async def daily_report_job(context: ContextTypes.DEFAULT_TYPE):
             await asyncio.sleep(30)
 
 
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"status":"ok","service":"commodity-sentiment-bot"}')
-
-    def log_message(self, format, *args):
-        pass
-
-
-def run_health_server(port=8502):
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    server.serve_forever()
-
-
 async def start_bot():
     if not BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN not set! Set it in .env or as environment variable.")
         return
 
     store.load()
-
-    health_thread = threading.Thread(target=run_health_server, daemon=True)
-    health_thread.start()
-    logger.info("Health server started on port 8502")
 
     app = Application.builder().token(BOT_TOKEN).connect_timeout(60).read_timeout(60).write_timeout(60).build()
     app.add_handler(CommandHandler("start", start_cmd))

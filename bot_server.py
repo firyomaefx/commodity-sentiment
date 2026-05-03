@@ -1,10 +1,12 @@
-"""FastAPI wrapper that runs the Telegram bot in a background thread.
-Deploy to Render.com as a Web Service. Start command: uvicorn bot_server:app --host 0.0.0.0 --port $PORT"""
+"""FastAPI wrapper that runs the Telegram bot in a dedicated background thread.
+Deploy to Render.com as a Web Service. Start command: uvicorn bot_server:app --host 0.0.0.0 --port $PORT
+"""
 import os
 import sys
 import asyncio
 import threading
 import logging
+import traceback
 from contextlib import asynccontextmanager
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -26,13 +28,34 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger("bot_server")
 
 
+_bot_task_thread = None
+
+
+def _run_bot_in_thread():
+    """Run async start_bot() in its own event loop inside a daemon thread."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        logger.info("Bot thread: event loop created, starting start_bot()...")
+        loop.run_until_complete(start_bot())
+    except Exception as e:
+        logger.error(f"Bot thread CRASHED: {e}")
+        logger.error(traceback.format_exc())
+        raise
+    finally:
+        loop.close()
+        logger.info("Bot thread: event loop closed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start the bot in a background asyncio task
-    task = asyncio.create_task(start_bot())
-    logger.info("Telegram bot background task started")
+    global _bot_task_thread
+    # Start the bot in a background daemon thread with its own event loop
+    _bot_task_thread = threading.Thread(target=_run_bot_in_thread, daemon=True)
+    _bot_task_thread.start()
+    logger.info("Telegram bot background thread started")
     yield
-    task.cancel()
+    logger.info("FastAPI shutting down — bot thread will terminate (daemon)")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -40,9 +63,17 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "commodity-sentiment-bot"}
+    alive = _bot_task_thread is not None and _bot_task_thread.is_alive()
+    return {
+        "status": "ok",
+        "service": "commodity-sentiment-bot",
+        "bot_thread_alive": alive,
+    }
 
 
 @app.get("/")
 async def root():
-    return {"message": "Commodity Sentiment Telegram Bot", "health": "/health"}
+    return {
+        "message": "Commodity Sentiment Telegram Bot",
+        "health": "/health",
+    }
