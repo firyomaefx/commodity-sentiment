@@ -219,3 +219,7 @@ COMMODITY_CONFIGS = {
 }
 
 REFRESH_INTERVAL_SECONDS = 300
+
+# Firecrawl settings (max URLs per commodity per refresh)
+FIRECRAWL_MAX_BATCH = 20
+FIRECRAWL_TIMEOUT = 10

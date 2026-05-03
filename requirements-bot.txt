@@ -9,3 +9,4 @@ groq>=0.20
 cloudscraper>=1.2
 fastapi>=0.109
 uvicorn>=0.27
+firecrawl-py>=1.15

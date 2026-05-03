@@ -11,6 +11,8 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: FIRECRAWL_API_KEY
+        sync: false
       - key: TELEGRAM_BOT_USERNAME
         value: SentimentIntelligence26Bot
       - key: SENANGPAY_URL

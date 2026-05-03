@@ -19,6 +19,7 @@ from collector import DataCollector
 from analyzer import SentimentAnalyzer
 from config import COMMODITY_CONFIGS
 from groq_client import GroqAnalyzer
+from firecrawl_client import FireCrawlClient
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -110,6 +111,7 @@ class SubscriberStore:
 
 store = SubscriberStore()
 groq_client = GroqAnalyzer()
+firecrawl_client = FireCrawlClient()
 
 
 def generate_report(commodity="gold", groq_client=None):
@@ -120,7 +122,7 @@ def generate_report(commodity="gold", groq_client=None):
     analyzer = SentimentAnalyzer(commodity=commodity, groq_client=groq_client)
     price_data = collector.fetch_price()
     market_data = collector.fcpo_market_data() if commodity == "fcpo" else None
-    data = collector.collect_all(groq_client=groq_client)
+    data = collector.collect_all(groq_client=groq_client, firecrawl_client=firecrawl_client)
     result = analyzer.run_full_analysis(data["articles"])
 
     a1 = result["analysis_1_macro"]

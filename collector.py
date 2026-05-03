@@ -1,9 +1,19 @@
 import feedparser
+import logging
 import requests
 from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
 from email.utils import parsedate_to_datetime
 from config import COMMODITY_CONFIGS
+
+logger = logging.getLogger(__name__)
+
+
+try:
+    from firecrawl_client import FireCrawlClient
+    _HAS_FIRECRAWL = True
+except ImportError:
+    _HAS_FIRECRAWL = False
 
 try:
     import cloudscraper
@@ -359,25 +369,80 @@ class DataCollector:
 
         return all_entries
 
-    def collect_all(self, groq_client=None):
+    def collect_all(self, groq_client=None, firecrawl_client=None):
+        """
+        Collect articles: Firecrawl search+scrape PRIMARY, RSS supplement.
+        Firecrawl unavailable → falls back to RSS + Google News scrape.
+        """
         self.articles = []
+        fc_articles = []
+
+        # 1) Firecrawl primary
+        if _HAS_FIRECRAWL and (firecrawl_client is None or firecrawl_client.available):
+            try:
+                if firecrawl_client is None:
+                    firecrawl_client = FireCrawlClient()
+                if firecrawl_client.available:
+                    fc_raw = firecrawl_client.fetch_commodity_news(self.config)
+                    # Score with keyword matcher
+                    now = datetime.now(timezone.utc)
+                    for a in fc_raw:
+                        text = a.get("text", "")
+                        score, categories = self._keyword_match_score(text)
+                        a["keyword_score"] = score
+                        a["categories"] = list(categories)
+                        # Parse age from published string if present
+                        if a.get("published"):
+                            try:
+                                dt = parsedate_to_datetime(a["published"])
+                                if dt and dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                a["published"] = dt.isoformat()
+                                a["age"] = self._age_str(now, dt)
+                            except Exception:
+                                a["age"] = None
+                        else:
+                            a["age"] = None
+                        a.setdefault("source", "firecrawl")
+                    fc_articles = [a for a in fc_raw if a.get("keyword_score", 0) > 0]
+            except Exception as e:
+                logger.warning(f"Firecrawl failed for {self.commodity}: {e}")
+
+        # 2) RSS supplement (always fetch; merges if Firecrawl thin)
         rss_results = self.fetch_rss()
-        web_results = self.fetch_web_search()
-        self.articles = rss_results + web_results
-        seen_titles = set()
+
+        # 3) Fallback: Google News scrape ONLY if Firecrawl empty AND RSS thin
+        web_results = []
+        if not fc_articles or len(fc_articles) < 5:
+            web_results = self.fetch_web_search()
+
+        # 4) Merge + dedup by URL
+        self.articles = fc_articles + rss_results + web_results
+        seen_urls = set()
         unique = []
         for a in self.articles:
-            key = a["title"][:80].lower().strip()
-            if key not in seen_titles:
-                seen_titles.add(key)
-                unique.append(a)
-        self.articles = sorted(unique, key=lambda x: x["keyword_score"], reverse=True)[:80]
+            url = a.get("link", a.get("url", "")).strip()
+            if not url:
+                continue
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            unique.append(a)
+
+        self.articles = sorted(unique, key=lambda x: x.get("keyword_score", 0), reverse=True)[:80]
+
+        # 5) Groq AI enrichment
         if groq_client and groq_client.available:
             self.articles = groq_client.batch_classify_articles(self.articles, self.commodity)
+
+        rss_count = sum(1 for a in self.articles if a.get("source") == "rss")
+        web_count = sum(1 for a in self.articles if a.get("source") in ("firecrawl", "web"))
+
         return {
             "total_articles": len(self.articles),
-            "rss_count": len(rss_results),
-            "web_count": len(web_results),
+            "rss_count": rss_count,
+            "web_count": web_count,
+            "firecrawl_count": len(fc_articles),
             "articles": self.articles,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "commodity": self.commodity,

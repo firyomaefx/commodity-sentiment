@@ -41,12 +41,13 @@ Real-time sentiment analysis for **Gold (XAU/USD)**, **WTI Crude Oil**, and **FC
 2. Go to [streamlit.io/cloud](https://streamlit.io/cloud)
 3. Deploy from GitHub → `dashboard.py`
 4. Set secrets: `GROQ_API_KEY`
+5. Set secrets: `FIRECRAWL_API_KEY`
 
 ### Bot — Render.com
 1. Create new **Web Service** from GitHub
 2. Start command: `uvicorn bot_server:app --host 0.0.0.0 --port $PORT`
 3. Build command: `pip install -r requirements-bot.txt`
-4. Set env vars: `TELEGRAM_BOT_TOKEN`, `GROQ_API_KEY`, `TELEGRAM_BOT_USERNAME=SentimentIntelligence26Bot`, `SENANGPAY_URL=https://app.senangpay.my/payment/177739832230`
+4. Set env vars: `TELEGRAM_BOT_TOKEN`, `GROQ_API_KEY`, `FIRECRAWL_API_KEY`, `TELEGRAM_BOT_USERNAME=SentimentIntelligence26Bot`, `SENANGPAY_URL=https://app.senangpay.my/payment/177739832230`
 
 ## Prepared by
 [@PedotTTRG](https://t.me/PedotTTRG)

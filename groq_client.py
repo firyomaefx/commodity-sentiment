@@ -64,7 +64,14 @@ class GroqAnalyzer:
             batch = top_articles[i:i + self.BATCH_SIZE]
             batch_texts = []
             for idx, a in enumerate(batch):
-                batch_texts.append(f"[{idx+1}] {a['title'][:120]}\n{a.get('summary', '')[:300]}")
+                title = a.get("title", "")[:120]
+                # Prefer full markdown body; fallback to summary; last fallback to text
+                body = a.get("markdown", "")
+                if not body:
+                    body = a.get("summary", a.get("text", ""))[:500]
+                else:
+                    body = body[:800]  # enough context without burning tokens
+                batch_texts.append(f"[{idx+1}] {title}\n{body}")
 
             prompt = f"""Analyze these commodity news articles about {comm_label}.
 For each article [1]-[{len(batch)}], return a JSON array with objects:
@@ -79,7 +86,7 @@ Articles:
                 f"You are a {comm_label} commodities market analyst. Return ONLY valid JSON, no explanation.",
                 prompt,
                 temperature=0.2,
-                max_tokens=800,
+                max_tokens=1200,
             )
             if not result:
                 continue

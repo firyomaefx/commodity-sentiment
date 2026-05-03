@@ -14,6 +14,7 @@ from collector import DataCollector
 from analyzer import SentimentAnalyzer
 from config import COMMODITY_CONFIGS, REFRESH_INTERVAL_SECONDS
 from groq_client import GroqAnalyzer
+from firecrawl_client import FireCrawlClient
 
 st.set_page_config(
     page_title="Commodity Sentiment Dashboard",
@@ -47,6 +48,8 @@ if os.path.exists(ENV_FILE):
 
 groq_client = GroqAnalyzer()
 
+firecrawl_client = FireCrawlClient()
+
 
 @st.cache_data(ttl=REFRESH_INTERVAL_SECONDS, show_spinner=False)
 def _fetch_single(commodity="gold"):
@@ -56,7 +59,7 @@ def _fetch_single(commodity="gold"):
     analyzer = SentimentAnalyzer(commodity=commodity, groq_client=groq_client)
     price_data = collector.fetch_price()
     market_data = collector.fcpo_market_data() if commodity == "fcpo" else None
-    data = collector.collect_all(groq_client=groq_client)
+    data = collector.collect_all(groq_client=groq_client, firecrawl_client=firecrawl_client)
     result = analyzer.run_full_analysis(data["articles"])
     result["collection_meta"] = {
         "total_articles": data["total_articles"],
