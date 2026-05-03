@@ -14,7 +14,6 @@ from collector import DataCollector
 from analyzer import SentimentAnalyzer
 from config import COMMODITY_CONFIGS, REFRESH_INTERVAL_SECONDS
 from groq_client import GroqAnalyzer
-import cache_manager
 
 st.set_page_config(
     page_title="Commodity Sentiment Dashboard",
@@ -81,11 +80,8 @@ def _prefetch_commodity(comm):
         pass
 
 
-_DISK_CACHE_LOCK = threading.Lock()
-
-
 def get_commodity_data(commodity="gold"):
-    """Return cached data for commodity. Priority: session > disk > network."""
+    """Return cached data for commodity. Priority: session > network."""
     cache_key = "_commodity_data"
     if cache_key not in st.session_state:
         st.session_state[cache_key] = {}
@@ -97,24 +93,7 @@ def get_commodity_data(commodity="gold"):
         d = data_dict[commodity]
         return d["result"], d["data"], d["price_data"], d["market_data"]
 
-    # 2. Disk cache (survives refresh/restart)
-    disk_result, disk_data, disk_price, disk_market = cache_manager.load(
-        commodity, ttl_seconds=REFRESH_INTERVAL_SECONDS
-    )
-    if disk_result is not None:
-        data_dict[commodity] = {
-            "result": disk_result, "data": disk_data,
-            "price_data": disk_price, "market_data": disk_market,
-            "loaded_at": datetime.now(timezone.utc).isoformat(),
-            "source": "disk",
-        }
-        st.session_state[cache_key] = data_dict
-        for comm in ["gold", "wti", "fcpo"]:
-            if comm != commodity and (comm not in data_dict or "error" in data_dict.get(comm, {})):
-                threading.Thread(target=_prefetch_commodity, args=(comm,), daemon=True).start()
-        return disk_result, disk_data, disk_price, disk_market
-
-    # 3. Network fetch (slowest)
+    # 2. Network fetch (cached by @st.cache_data)
     r, d, p, m = _fetch_single(commodity)
     data_dict[commodity] = {
         "result": r, "data": d, "price_data": p, "market_data": m,
@@ -122,10 +101,6 @@ def get_commodity_data(commodity="gold"):
         "source": "network",
     }
     st.session_state[cache_key] = data_dict
-
-    # Persist to disk (thread-safe)
-    with _DISK_CACHE_LOCK:
-        cache_manager.save(commodity, r, d, p, m)
 
     # Background prefetch other commodities
     for comm in ["gold", "wti", "fcpo"]:
