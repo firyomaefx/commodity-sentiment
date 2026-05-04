@@ -652,7 +652,7 @@ def main():
 
     st.markdown("<div style='border-top: 1px solid rgba(255,255,255,0.06); margin: 28px 0;'></div>", unsafe_allow_html=True)
 
-    st.markdown(f'<div style="text-align:center;color:#636366;font-size:11px;font-family:{APPLE_FONT};margin-bottom:20px;">Auto-refreshes every 5 min · VADER + Groq AI Engine · Firecrawl Deep Scrape<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True) &middot; /report /report\\_wti /report\\_fcpo on-demand &middot; VADER + Groq AI Engine<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align:center;color:#636366;font-size:11px;font-family:{APPLE_FONT};margin-bottom:20px;">Auto-refreshes every 5 min · VADER + Groq AI Engine · Firecrawl Deep Scrape<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True)
 
     try:
         from streamlit_autorefresh import st_autorefresh
