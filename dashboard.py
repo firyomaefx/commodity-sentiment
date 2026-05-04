@@ -412,7 +412,6 @@ def main():
     commodity = st.session_state["commodity"]
     cfg = COMMODITY_CONFIGS.get(commodity, COMMODITY_CONFIGS["gold"])
 
-    TELEGRAM_BOT = os.environ.get("TELEGRAM_BOT_USERNAME", "SentimentIntelligence26Bot")
     SENANGPAY_URL = os.environ.get("SENANGPAY_URL", "https://app.senangpay.my/payment/177739832230")
 
     st.markdown(f'''<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:12px;">
@@ -426,11 +425,20 @@ def main():
 <div style="color:#8E8E93;font-size:14px;font-family:{APPLE_FONT};">{datetime.now(MYT).strftime("%I:%M %p")} MYT</div>
 <div style="color:#6E6E73;font-size:11px;font-family:{APPLE_FONT};margin-top:2px;">Auto-refresh 5 min</div>
 </div>
-<a href="https://t.me/{TELEGRAM_BOT}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #0A84FF;border-radius:999px;padding:8px 18px;color:#0A84FF;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:8px;"><span style="font-size:14px;">✈️</span> Get Via Telegram</a>
 <a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #000000;border-radius:999px;padding:8px 18px;color:#000000;font-family:{APPLE_FONT};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;"><span style="font-size:14px;">☕</span> Support Us</a>
 </div>
 </div>
 </div>''', unsafe_allow_html=True)
+
+    # Refresh button below header (Streamlit native)
+    r1, r2, r3 = st.columns([1, 1, 6])
+    with r1:
+        if st.button("🔄 Refresh Now", key="refresh_btn", use_container_width=True):
+            st.rerun()
+    with r2:
+        st.markdown(f'''<a href="{SENANGPAY_URL}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #000000;border-radius:999px;padding:6px 14px;color:#000000;font-family:{APPLE_FONT};font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;width:100%;justify-content:center;"><span style="font-size:13px;">☕</span> Support Us</a>''', unsafe_allow_html=True)
+    with r3:
+        st.empty()
 
     col_gold, col_wti, col_fcpo = st.columns([1, 1, 1])
     with col_gold:
