@@ -1,10 +1,11 @@
 import feedparser
 import logging
+import re
 import requests
 from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
 from email.utils import parsedate_to_datetime
-from config import COMMODITY_CONFIGS
+from config import COMMODITY_CONFIGS, MAX_ARTICLE_AGE_HOURS
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,37 @@ class DataCollector:
         return f"{d}d"
 
     @staticmethod
+    def _filter_fresh(articles):
+        """Reject articles older than MAX_ARTICLE_AGE_HOURS."""
+        if MAX_ARTICLE_AGE_HOURS <= 0:
+            return articles
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
+        fresh = []
+        for a in articles:
+            pub = a.get("published")
+            if not pub:
+                # No date info — keep it (can't determine age)
+                fresh.append(a)
+                continue
+            try:
+                if isinstance(pub, str):
+                    # Try ISO format first
+                    dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                elif isinstance(pub, datetime):
+                    dt = pub
+                else:
+                    fresh.append(a)
+                    continue
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if dt >= cutoff:
+                    fresh.append(a)
+            except Exception:
+                # Date parsing failed — keep it to avoid losing articles
+                fresh.append(a)
+        return fresh
+
+    @staticmethod
     def _parse_relative_time(text):
         """Parse strings like '2 hours ago', '30 minutes ago' into datetime (UTC)."""
         text = text.lower().strip()
@@ -145,140 +177,112 @@ class DataCollector:
         return None
 
     def _fetch_fcpo_market_data(self):
+        """Investing.com scraper: CSS selectors + regex dual fallback."""
+        url = "https://www.investing.com/commodities/palm-oil"
+        html = ""
         try:
             if _HAS_CLOUDSCRAPER:
                 scraper = cloudscraper.create_scraper()
-                resp = scraper.get("https://www.investing.com/commodities/palm-oil", timeout=20)
+                resp = scraper.get(url, timeout=20)
             else:
-                resp = self.session.get("https://www.investing.com/commodities/palm-oil", timeout=15)
+                resp = self.session.get(url, timeout=15)
             if resp.status_code != 200:
                 return None
-            soup = BeautifulSoup(resp.text, "html.parser")
+            html = resp.text
+        except Exception:
+            return None
 
-            def _val(test_id):
-                el = soup.select_one(f'[data-test="{test_id}"]')
-                if not el:
-                    return None
-                txt = el.text.strip().replace(",", "").replace("%", "").strip()
+        soup = BeautifulSoup(html, "html.parser")
+
+        # ---- Phase 1: CSS selectors ----
+        def _sel(css):
+            el = soup.select_one(css)
+            if el:
+                txt = el.get_text(strip=True).replace(",", "").replace("%", "").strip()
                 try:
                     return float(txt)
                 except ValueError:
                     return txt if txt else None
-
-            price = _val("instrument-price-last")
-            if price is None:
-                return None
-            if isinstance(price, float):
-                price = round(price, 2)
-
-            prev = _val("prevClose")
-            open_ = _val("open")
-            daily_range = _val("dailyRange")
-            weekly_range = _val("weekRange")
-            volume = _val("volume")
-            settlement_type = _val("settlement_type")
-            contract_size = _val("contract_size")
-            point_value = _val("point_value")
-            tick_size = _val("tick_size")
-            tick_value = _val("tick_value")
-
-            def _safe_float(v, default=None):
-                if v is None:
-                    return default
-                try:
-                    return float(v)
-                except (ValueError, TypeError):
-                    return default
-
-            prev_f = _safe_float(prev, price)
-            change = round(_safe_float(price, 0) - prev_f, 2) if isinstance(price, (int, float)) else 0
-            change_pct = round((change / prev_f) * 100, 2) if prev_f else 0
-
-            high = None
-            low = None
-            if daily_range and isinstance(daily_range, str) and "-" in daily_range:
-                parts = daily_range.split("-")
-                try:
-                    low = float(parts[0].strip().replace(",", ""))
-                    high = float(parts[1].strip().replace(",", ""))
-                except (ValueError, IndexError):
-                    pass
-
-            volume_display = volume
-            if isinstance(volume, (int, float)):
-                volume_display = f"{int(volume):,}"
-            elif isinstance(volume, str):
-                volume_display = volume
-            else:
-                volume_display = None
-
-            return {
-                "price": _safe_float(price, 0),
-                "open": _safe_float(open_),
-                "high": high,
-                "low": low,
-                "prev_close": prev_f,
-                "change": change,
-                "change_pct": change_pct,
-                "volume": _safe_float(volume),
-                "volume_display": volume_display,
-                "day_range": str(daily_range) if daily_range else None,
-                "week_range_52": str(weekly_range) if weekly_range else None,
-                "settlement_type": str(settlement_type) if settlement_type else None,
-                "contract_size": str(contract_size) if contract_size else None,
-                "point_value": str(point_value) if point_value else None,
-                "tick_size": str(tick_size) if tick_size else None,
-                "source": "investing.com",
-                "currency": "RM",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-        except Exception:
             return None
 
-    def _fetch_fcpo_price(self):
-        result = self._fetch_fcpo_market_data()
-        if result and result.get("price"):
-            return {
-                "price": result["price"],
-                "change": result.get("change"),
-                "change_pct": result.get("change_pct"),
-                "source": result.get("source", "investing.com"),
-                "currency": result.get("currency", "RM"),
-                "open": result.get("open"),
-                "high": result.get("high"),
-                "low": result.get("low"),
-                "prev_close": result.get("prev_close"),
-                "volume": result.get("volume"),
-                "volume_display": result.get("volume_display"),
-                "day_range": result.get("day_range"),
-                "week_range_52": result.get("week_range_52"),
-            }
-        try:
-            if _HAS_CLOUDSCRAPER:
-                scraper = cloudscraper.create_scraper()
-                resp = scraper.get("https://www.investing.com/commodities/palm-oil", timeout=20)
-            else:
-                resp = self.session.get("https://www.investing.com/commodities/palm-oil", timeout=15)
-            if resp.status_code != 200:
-                return None
-            soup = BeautifulSoup(resp.text, "html.parser")
-            price_el = soup.select_one('[data-test="instrument-price-last"]')
-            if not price_el:
-                return None
-            price_text = price_el.text.strip().replace(",", "")
-            price = float(price_text)
-            prev_el = soup.select_one('[data-test="instrument-price-prev-close"]')
-            prev = price
-            if prev_el:
+        price = _sel('[data-test="instrument-price-last"]') or _sel('.text-5xl') or _sel('.last-price') or _sel('.arial_26')
+        prev = _sel('[data-test="prevClose"]') or _sel('[data-test="instrument-price-prev-close"]')
+        open_ = _sel('[data-test="open"]')
+        daily_range = _sel('[data-test="dailyRange"]')
+        weekly_range = _sel('[data-test="weekRange"]')
+        volume = _sel('[data-test="volume"]')
+
+        # ---- Phase 2: Regex fallback (extract from raw HTML) ----
+        if price is None:
+            m_price = re.search(r'(?:Price|Last|Current)[\s:]+([\d,]+\.?\d*)', html)
+            if not m_price:
+                # Investing.com pattern: "4,570.00" near "Palm Oil"
+                m_price = re.search(r'(\d{1,2},\d{3}\.\d{2})', html)
+            if m_price:
                 try:
-                    prev = float(prev_el.text.strip().replace(",", ""))
+                    price = float(m_price.group(1).replace(",", ""))
                 except ValueError:
                     pass
-            change = price - prev
-            change_pct = (change / prev) * 100 if prev else 0
-            return {"price": round(price, 2), "change": round(change, 2), "change_pct": round(change_pct, 2), "source": "investing.com", "currency": "RM"}
-        except Exception:
+
+        if prev is None and price is not None:
+            m_prev = re.search(r'(?:Prev\.?\s*Close|Previous)[\s:]+([\d,]+\.?\d*)', html)
+            if m_prev:
+                try:
+                    prev = float(m_prev.group(1).replace(",", ""))
+                except ValueError:
+                    pass
+
+        if price is None:
+            logger.warning("FCPO: Could not extract price from investing.com (CSS + regex both failed)")
             return None
+
+        def _safe_float(v, default=None):
+            if v is None:
+                return default
+            try:
+                return float(v)
+            except (ValueError, TypeError):
+                return default
+
+        price_f = _safe_float(price, 0)
+        prev_f = _safe_float(prev, price_f)
+        change = round(price_f - prev_f, 2)
+        change_pct = round((change / prev_f) * 100, 2) if prev_f else 0
+
+        high = None
+        low = None
+        if daily_range and isinstance(daily_range, str) and "-" in daily_range:
+            parts = daily_range.split("-")
+            try:
+                low = float(parts[0].strip().replace(",", ""))
+                high = float(parts[1].strip().replace(",", ""))
+            except (ValueError, IndexError):
+                pass
+
+        volume_display = volume
+        if isinstance(volume, (int, float)):
+            volume_display = f"{int(volume):,}"
+        elif isinstance(volume, str):
+            volume_display = volume
+        else:
+            volume_display = None
+
+        return {
+            "price": price_f,
+            "open": _safe_float(open_),
+            "high": high,
+            "low": low,
+            "prev_close": prev_f,
+            "change": change,
+            "change_pct": change_pct,
+            "volume": _safe_float(volume),
+            "volume_display": volume_display,
+            "day_range": str(daily_range) if daily_range else None,
+            "week_range_52": str(weekly_range) if weekly_range else None,
+            "source": "investing.com",
+            "currency": "RM",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
     def fcpo_market_data(self):
         if self.commodity != "fcpo":
@@ -429,9 +433,11 @@ class DataCollector:
             seen_urls.add(url)
             unique.append(a)
 
-        self.articles = sorted(unique, key=lambda x: x.get("keyword_score", 0), reverse=True)[:80]
+        # 5) Freshness filter: reject articles older than MAX_ARTICLE_AGE_HOURS
+        self.articles = self._filter_fresh(unique)
+        fresh_count = len(self.articles)
 
-        # 5) Groq AI enrichment
+        # 6) Groq AI enrichment
         if groq_client and groq_client.available:
             self.articles = groq_client.batch_classify_articles(self.articles, self.commodity)
 
@@ -443,6 +449,7 @@ class DataCollector:
             "rss_count": rss_count,
             "web_count": web_count,
             "firecrawl_count": len(fc_articles),
+            "fresh_count": fresh_count,
             "articles": self.articles,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "commodity": self.commodity,

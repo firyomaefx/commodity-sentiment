@@ -404,7 +404,7 @@ def main():
 
     with st.sidebar:
         st.markdown(f"<div style='color:#8E8E93;font-size:13px;font-weight:600;letter-spacing:0.1em;margin-bottom:8px;font-family:{APPLE_FONT};'>ABOUT</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='color:#8E8E93;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Real-time sentiment for Gold, WTI Crude Oil & FCPO Palm Oil.<br><br>Groq AI + VADER NLP engine scanning RSS feeds and news articles.<br><br>Daily Telegram report at <b>6:01 AM MYT</b>.<br><br><a href='https://t.me/PedotTTRG' style='color:#0A84FF;'>Prepared by @PedotTTRG</a></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:#8E8E93;font-size:12px;line-height:1.6;font-family:{APPLE_FONT};'>Real-time sentiment for Gold, WTI Crude Oil & FCPO Palm Oil.<br><br>Groq AI + VADER NLP engine with Firecrawl deep article scraping.<br><br>Auto-refreshes every 5 min.<br><br><a href='https://t.me/PedotTTRG' style='color:#0A84FF;'>Prepared by @PedotTTRG</a></div>", unsafe_allow_html=True)
 
     if "commodity" not in st.session_state:
         st.session_state["commodity"] = "gold"
@@ -627,9 +627,14 @@ def main():
 
     st.markdown("<div style='border-top: 1px solid rgba(255,255,255,0.06); margin: 28px 0;'></div>", unsafe_allow_html=True)
 
-    st.markdown(f'<div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:16px;">Intelligence Feed</div><div style="color:#636366;font-size:12px;font-family:{APPLE_FONT};margin-bottom:12px;">{len(data["articles"])} articles from {cm["total_articles"]} collected &middot; {cm["rss_count"]} RSS &middot; {cm["web_count"]} web</div>', unsafe_allow_html=True)
+    # Stale warning banner
+    fresh_count = cm.get("fresh_count", len(data["articles"]))
+    if fresh_count == 0 and len(data["articles"]) > 0:
+        st.markdown(f'<div style="background:rgba(255,159,10,0.1);border:1px solid rgba(255,159,10,0.3);border-radius:12px;padding:12px 16px;margin-bottom:16px;"><div style="color:#FF9F0A;font-size:13px;font-weight:600;font-family:{APPLE_FONT};">⚠️ No articles from last 3 days</div><div style="color:#86868B;font-size:12px;font-family:{APPLE_FONT};margin-top:4px;">Showing older data. Prices may not reflect current market conditions. Click <b>Refresh Now</b> to fetch latest.</div></div>', unsafe_allow_html=True)
 
-    articles_to_show = data["articles"][:20]
+    st.markdown(f'<div style="color:#86868B;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-family:{APPLE_FONT};margin-bottom:16px;">Intelligence Feed</div><div style="color:#636366;font-size:12px;font-family:{APPLE_FONT};margin-bottom:12px;">{fresh_count} fresh articles from {cm["total_articles"]} collected · {cm.get("rss_count",0)} RSS · {cm.get("web_count",0)} web · 3-day cutoff</div>', unsafe_allow_html=True)
+
+    articles_to_show = data["articles"][:5]
     if articles_to_show:
         for i, article in enumerate(articles_to_show):
             cat_str = " &middot; ".join(article.get("categories", []))
@@ -639,14 +644,15 @@ def main():
             badge = f'<span style="background:rgba(255,255,255,0.06);color:#86868B;font-size:11px;padding:2px 8px;border-radius:980px;font-family:{APPLE_FONT};font-weight:600;">{ks}</span>'
             src = f'<div style="margin-top:6px;"><a href="{article["link"]}" style="font-size:12px;font-family:{APPLE_FONT};">Source</a></div>' if article.get("link") else ""
             age = article.get("age")
-            age_html = f'<span style="color:#0A84FF;font-size:11px;font-family:{APPLE_FONT};margin-left:12px;">&#128336; {age} ago</span>' if age else ""
+            age_color = "#FF453A" if age and ("d" in age) else "#FF9F0A" if age and ("h" in str(age).split(" ", 1)[0] and int(str(age).split("h", 1)[0]) >= 12) else "#0A84FF"
+            age_html = f'<span style="color:{age_color};font-size:11px;font-family:{APPLE_FONT};margin-left:12px;">🕐 {age} ago</span>' if age else ""
             st.markdown(f'<div style="background:rgba(28,28,30,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:{ic};flex-shrink:0;"></div><div style="color:#F5F5F7;font-size:14px;font-weight:500;font-family:{APPLE_FONT};flex:1;">{article["title"][:90]}</div>{badge}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};margin-bottom:4px;">{cat_str}</div><div style="color:#86868B;font-size:11px;font-family:{APPLE_FONT};">VADER <span style="color:{ic};font-weight:600;">{vader_s:.3f}</span>{age_html}</div><div style="color:#AEAEB2;font-size:13px;line-height:1.5;margin-top:6px;font-family:{APPLE_FONT};">{article["summary"][:200]}</div>{src}</div>', unsafe_allow_html=True)
 
 
 
     st.markdown("<div style='border-top: 1px solid rgba(255,255,255,0.06); margin: 28px 0;'></div>", unsafe_allow_html=True)
 
-    st.markdown(f'<div style="text-align:center;color:#636366;font-size:11px;font-family:{APPLE_FONT};margin-bottom:20px;">Daily reports at 6:01 AM MYT &middot; /report /report\\_wti /report\\_fcpo on-demand &middot; VADER + Groq AI Engine<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align:center;color:#636366;font-size:11px;font-family:{APPLE_FONT};margin-bottom:20px;">Auto-refreshes every 5 min · VADER + Groq AI Engine · Firecrawl Deep Scrape<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True) &middot; /report /report\\_wti /report\\_fcpo on-demand &middot; VADER + Groq AI Engine<br><br><span style="color:#86868B;">Prepared by</span> <a href="https://t.me/PedotTTRG" target="_blank" style="color:#0A84FF;text-decoration:none;">@PedotTTRG</a></div>', unsafe_allow_html=True)
 
     try:
         from streamlit_autorefresh import st_autorefresh

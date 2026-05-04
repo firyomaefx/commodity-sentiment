@@ -223,3 +223,6 @@ REFRESH_INTERVAL_SECONDS = 300
 # Firecrawl settings (max URLs per commodity per refresh)
 FIRECRAWL_MAX_BATCH = 20
 FIRECRAWL_TIMEOUT = 10
+
+# Article freshness: max age in hours (0 = no filter)
+MAX_ARTICLE_AGE_HOURS = 72  # 3 days
